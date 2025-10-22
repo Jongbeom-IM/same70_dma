@@ -1,0 +1,42 @@
+configVersion: 1.0.0
+componentName: usart1
+coreVersion: 5.8.2
+device: ATSAME70Q21B
+library: []
+dependency:
+- dependencyPackage: class com.microchip.mcc.harmony.HarmonyModule
+  name: usart1
+  type: module
+  version: ''
+- dependencyPackage: ''
+  name: csp
+  type: package
+  version: v3.22.5
+customDataClassName: com.microchip.utils_mh3.utils.persistence.CustomModuleData
+data:
+  attachments: {}
+  elementPosition:
+    attributes:
+      id: __ROOTVIEW
+    children:
+    - children:
+      - attributes:
+          id: usart1
+          x: '179'
+          y: '202'
+        type: ElementPosition
+      type: ElementPositions
+    type: ComponentGraph
+  symbols:
+    USART_SPI_BRG_VALUE:
+      attributes:
+        id: USART_SPI_BRG_VALUE
+      children:
+      - children:
+        - attributes:
+            id: usart1
+            value: '150'
+          type: Dynamic
+        type: Values
+      type: Integer
+  userData: {}
