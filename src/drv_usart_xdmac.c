@@ -37,8 +37,8 @@ typedef struct {
 static const usart_dma_config_t usart_dma_configs[] = {
 	{
 		.usart = USART0,
-		.tx_channel = XDMAC_TX_CH,
-		.rx_channel = XDMAC_RX_CH,
+		.tx_channel = XDMAC_USART0_TX_CH,
+		.rx_channel = XDMAC_USART0_RX_CH,
 		.tx_perid = USART0_XDMAC_TX_CH_NUM,
 		.rx_perid = USART0_XDMAC_RX_CH_NUM
 	},
