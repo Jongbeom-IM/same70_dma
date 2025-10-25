@@ -1,0 +1,75 @@
+{
+    "configurations": [
+        {
+            "name": "SAME70",
+            "includePath": [
+                "${workspaceFolder}/src",
+                "${workspaceFolder}/src/config",
+                "${workspaceFolder}/src/ASF",
+                "${workspaceFolder}/src/ASF/common/boards",
+                "${workspaceFolder}/src/ASF/common/services/clock",
+                "${workspaceFolder}/src/ASF/common/services/delay",
+                "${workspaceFolder}/src/ASF/common/services/gpio",
+                "${workspaceFolder}/src/ASF/common/services/ioport",
+                "${workspaceFolder}/src/ASF/common/services/serial",
+                "${workspaceFolder}/src/ASF/common/utils",
+                "${workspaceFolder}/src/ASF/common/utils/interrupt",
+                "${workspaceFolder}/src/ASF/common/utils/stdio/stdio_serial",
+                "${workspaceFolder}/src/ASF/sam/boards/same70_xplained",
+                "${workspaceFolder}/src/ASF/sam/drivers/mpu",
+                "${workspaceFolder}/src/ASF/sam/drivers/pio",
+                "${workspaceFolder}/src/ASF/sam/drivers/pmc",
+                "${workspaceFolder}/src/ASF/sam/drivers/spi",
+                "${workspaceFolder}/src/ASF/sam/drivers/uart",
+                "${workspaceFolder}/src/ASF/sam/drivers/usart",
+                "${workspaceFolder}/src/ASF/sam/drivers/xdmac",
+                "${workspaceFolder}/src/ASF/sam/utils",
+                "${workspaceFolder}/src/ASF/sam/utils/cmsis/same70/include",
+                "${workspaceFolder}/src/ASF/sam/utils/cmsis/same70/source",
+                "${workspaceFolder}/src/ASF/sam/utils/header_files",
+                "${workspaceFolder}/src/ASF/sam/utils/linker_scripts/same70/same70q21",
+                "${workspaceFolder}/src/ASF/sam/utils/preprocessor",
+                "${workspaceFolder}/src/ASF/thirdparty/CMSIS/Include",
+                "C:/gcc-arm-none-eabi/gcc-arm-none-eabi-10.3-2021.10/arm-none-eabi/include",
+                "C:/gcc-arm-none-eabi/gcc-arm-none-eabi-10.3-2021.10/lib/gcc/arm-none-eabi/10.3.1/include",
+                "${workspaceFolder}/**"
+            ],
+            "defines": [
+                "__SAME70Q21__",
+                "BOARD=SAME70_XPLAINED",
+                "ARM_MATH_CM7=true",
+                "printf=iprintf",
+                "scanf=iscanf"
+            ],
+            "compilerPath": "C:/gcc-arm-none-eabi/gcc-arm-none-eabi-10.3-2021.10/bin/arm-none-eabi-gcc.exe",
+            "cStandard": "c99",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "gcc-arm",
+            "configurationProvider": "ms-vscode.makefile-tools",
+            "forcedInclude": [],
+            "browse": {
+                "path": [
+                    "${workspaceFolder}/src",
+                    "${workspaceFolder}/src/ASF",
+                    "${workspaceFolder}/**"
+                ],
+                "limitSymbolsToIncludedHeaders": true
+            },
+            "compilerArgs": [
+                "-mcpu=cortex-m7",
+                "-mthumb",
+                "-mfpu=fpv5-d16",
+                "-mfloat-abi=hard",
+                "-ffunction-sections",
+                "-fdata-sections",
+                "-mlong-calls",
+                "-g3",
+                "-Wall",
+                "-Wextra",
+                "-Wundef",
+                "-Wshadow"
+            ]
+        }
+    ],
+    "version": 4
+}

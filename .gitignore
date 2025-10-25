@@ -1,0 +1,37 @@
+# Build artifacts
+Debug/
+*.o
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+
+# VS Code specific (optional)
+.vscode/settings.json
+.vscode/launch.json
+.vscode/browse.vc.db*
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Compiler specific
+*.d
+*.su
+
+# IDE specific
+*.swp
+*.swo
+
+# Documentation build
+doc/
+
+# Backup files
+*.bak
+*.orig
