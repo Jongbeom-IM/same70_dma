@@ -135,13 +135,14 @@ uint32_t DRV_USART_DMA_Send(Usart *phandle, void *pbuf, uint32_t size, uint32_t 
 
 	while(time_out > 0)
 	{
-		if(g_xdmac_tx_done == 1)
+		if(xdmac_is_channel_done(dma_config->tx_channel))
 			break;
 
 		time_out--;
 		delay_us(1);
 	}
 
+	xdmac_clear_channel_flag(dma_config->tx_channel);
 	g_xdmac_tx_done = 0;
 
 	xdmac_channel_disable_interrupt(XDMAC, dma_config->tx_channel, xdmaint);
@@ -229,13 +230,14 @@ uint32_t DRV_USART_DMA_Recv(Usart *phandle, void *pbuf, uint32_t size, uint32_t 
 
 	while(time_out > 0)
 	{
-		if(g_xdmac_rx_done == 1)
+		if(xdmac_is_channel_done(dma_config->rx_channel))
 			break;
 
 		time_out--;
 		delay_us(1);
 	}
 
+	xdmac_clear_channel_flag(dma_config->rx_channel);
 	g_xdmac_rx_done = 0;
 
 	xdmac_channel_disable_interrupt(XDMAC, dma_config->rx_channel, xdmaint);

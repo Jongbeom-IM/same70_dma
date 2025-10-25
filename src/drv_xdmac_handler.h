@@ -61,5 +61,25 @@
 ******************************************************************************/
 
 extern volatile uint8_t g_xdmac_tx_done, g_xdmac_rx_done;
+extern volatile uint8_t g_xdmac_channel_done[24]; /* Channel-specific completion flags */
+
+/******************************************************************************
+* Functions
+******************************************************************************/
+
+/* Helper function to check specific channel completion */
+static inline uint8_t xdmac_is_channel_done(uint32_t channel) {
+    if (channel < 24) {
+        return g_xdmac_channel_done[channel];
+    }
+    return 0;
+}
+
+/* Helper function to clear specific channel flag */
+static inline void xdmac_clear_channel_flag(uint32_t channel) {
+    if (channel < 24) {
+        g_xdmac_channel_done[channel] = 0;
+    }
+}
 
 #endif	/* End of __DRV_SAM_S70_E70_V71_XDMAC_HANDLER_H__ */
