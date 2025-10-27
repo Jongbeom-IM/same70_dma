@@ -54,6 +54,41 @@
             ],
             "group": "build",
             "detail": "Clean and rebuild the project"
+        },
+        {
+            "label": "Flash to SAME70",
+            "type": "shell",
+            "command": "\"C:/Program Files (x86)/Atmel/Studio/7.0/atbackend/atprogram.exe\"",
+            "args": [
+                "-t", "edbg",
+                "-i", "swd", 
+                "-d", "ATSAME70Q21",
+                "program",
+                "-f", "${workspaceFolder}/Debug/AS70_SAME70_XPLD_348_USART_XDMAC.elf",
+                "--verify"
+            ],
+            "group": "build",
+            "dependsOn": "Build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "detail": "Flash the compiled program to SAME70-XPLD board using atprogram"
+        },
+        {
+            "label": "Build and Flash",
+            "type": "shell",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Build",
+                "Flash to SAME70"
+            ],
+            "group": "build",
+            "detail": "Build the project and flash to SAME70-XPLD board"
         }
     ]
 }

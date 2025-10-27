@@ -11,8 +11,8 @@ $BuildDir = "Debug"
 $SrcDir = "src"
 $ASFDir = "$SrcDir/ASF"
 
-# Toolchain paths
-$ToolchainPath = "C:/gcc-arm-none-eabi/gcc-arm-none-eabi-10.3-2021.10/bin/"
+# Toolchain paths (Using Atmel Studio toolchain)
+$ToolchainPath = "C:/Program Files (x86)/Atmel/Studio/7.0/toolchain/arm/arm-gnu-toolchain/bin/"
 $CC = "${ToolchainPath}arm-none-eabi-gcc.exe"
 $OBJCOPY = "${ToolchainPath}arm-none-eabi-objcopy.exe"
 $SIZE = "${ToolchainPath}arm-none-eabi-size.exe"

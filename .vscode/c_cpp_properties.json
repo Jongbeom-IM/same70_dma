@@ -30,8 +30,8 @@
                 "${workspaceFolder}/src/ASF/sam/utils/linker_scripts/same70/same70q21",
                 "${workspaceFolder}/src/ASF/sam/utils/preprocessor",
                 "${workspaceFolder}/src/ASF/thirdparty/CMSIS/Include",
-                "C:/gcc-arm-none-eabi/gcc-arm-none-eabi-10.3-2021.10/arm-none-eabi/include",
-                "C:/gcc-arm-none-eabi/gcc-arm-none-eabi-10.3-2021.10/lib/gcc/arm-none-eabi/10.3.1/include",
+                "C:/Program Files (x86)/Atmel/Studio/7.0/toolchain/arm/arm-gnu-toolchain/arm-none-eabi/include",
+                "C:/Program Files (x86)/Atmel/Studio/7.0/toolchain/arm/arm-gnu-toolchain/lib/gcc/arm-none-eabi/6.3.1/include",
                 "${workspaceFolder}/**"
             ],
             "defines": [
@@ -41,7 +41,7 @@
                 "printf=iprintf",
                 "scanf=iscanf"
             ],
-            "compilerPath": "C:/gcc-arm-none-eabi/gcc-arm-none-eabi-10.3-2021.10/bin/arm-none-eabi-gcc.exe",
+            "compilerPath": "C:/Program Files (x86)/Atmel/Studio/7.0/toolchain/arm/arm-gnu-toolchain/bin/arm-none-eabi-gcc.exe",
             "cStandard": "c99",
             "cppStandard": "c++11",
             "intelliSenseMode": "gcc-arm",
