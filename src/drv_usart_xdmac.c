@@ -57,14 +57,9 @@ static const usart_dma_config_t usart_dma_configs[] = {
 static xdmac_channel_config_t xdmac_tx_cfg, xdmac_rx_cfg;
 
 /** Helper function to get USART DMA configuration */
-static const usart_dma_config_t* get_usart_dma_config(Usart *pusart)
+static const usart_dma_config_t* get_usart_dma_config(uint8_t channel)
 {
-	for (uint32_t i = 0; i < USART_DMA_CONFIG_COUNT; i++) {
-		if (usart_dma_configs[i].usart == pusart) {
-			return &usart_dma_configs[i];
-		}
-	}
-	return NULL;
+	return &usart_dma_configs[channel];
 }
 
 
@@ -78,13 +73,12 @@ uint32_t DRV_USART_DMA_Send(Usart *phandle, void *pbuf, uint32_t size, uint32_t 
 	if(pbuf == NULL) return 1;
 
 	/* Get DMA configuration for this USART */
-	dma_config = get_usart_dma_config(phandle);
+	dma_config = get_usart_dma_config(dma_config->tx_channel);
 	if (dma_config == NULL) {
 		XDMAC_USART_DebugError(("Unsupported USART for DMA\r\n"));
 		return 1;
 	}
 
-	g_xdmac_tx_done = 0;
 
 	/* Flush XDMAC interrupt status register */
 	(void)(XDMAC->XDMAC_CHID[dma_config->tx_channel].XDMAC_CIS);
@@ -143,7 +137,6 @@ uint32_t DRV_USART_DMA_Send(Usart *phandle, void *pbuf, uint32_t size, uint32_t 
 	}
 
 	xdmac_clear_channel_flag(dma_config->tx_channel);
-	g_xdmac_tx_done = 0;
 
 	xdmac_channel_disable_interrupt(XDMAC, dma_config->tx_channel, xdmaint);
 	xdmac_channel_disable(XDMAC, dma_config->tx_channel);
@@ -170,13 +163,11 @@ uint32_t DRV_USART_DMA_Recv(Usart *phandle, void *pbuf, uint32_t size, uint32_t 
 	if(pbuf == NULL) return 1;
 
 	/* Get DMA configuration for this USART */
-	dma_config = get_usart_dma_config(phandle);
+	dma_config = get_usart_dma_config(dma_config->rx_channel);
 	if (dma_config == NULL) {
 		XDMAC_USART_DebugError(("Unsupported USART for DMA\r\n"));
 		return 1;
 	}
-
-	g_xdmac_rx_done = 0;
 
 	/* Flush USART RHR which is used as XDMAC source address */
 	(void)(phandle->US_RHR);
@@ -238,7 +229,6 @@ uint32_t DRV_USART_DMA_Recv(Usart *phandle, void *pbuf, uint32_t size, uint32_t 
 	}
 
 	xdmac_clear_channel_flag(dma_config->rx_channel);
-	g_xdmac_rx_done = 0;
 
 	xdmac_channel_disable_interrupt(XDMAC, dma_config->rx_channel, xdmaint);
 	xdmac_channel_disable(XDMAC, dma_config->rx_channel);

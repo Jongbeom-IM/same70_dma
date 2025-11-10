@@ -52,7 +52,23 @@
 #define SSC_XDMAC_TX_CH_NUM             32
 #define SSC_XDMAC_RX_CH_NUM             33
 #define PIOA_XDMAC_RX_CH_NUM            34
-#define 
+#define AFEC0_XDMAC_RX_CH_NUM           35
+#define AFEC1_XDMAC_RX_CH_NUM           36
+#define AES_XDMAC_TX_CH_NUM             37
+#define AES_XDMAC_RX_CH_NUM             38
+#define PWM1_XDMAC_TX_CH_NUM            39
+#define TC0_XDMAC_RX_CH_NUM             40
+#define TC3_XDMAC_RX_CH_NUM             41
+#define TC6_XDMAC_RX_CH_NUM             42
+#define TC9_XDMAC_RX_CH_NUM             43
+#define I2SC0_XDMAC_TX_LEFT_CH_NUM      44
+#define I2SC0_XDMAC_RX_LEFT_CH_NUM      45
+#define I2SC1_XDMAC_TX_LEFT_CH_NUM      46
+#define I2SC1_XDMAC_RX_LEFT_CH_NUM      47
+#define I2SC0_XDMAC_TX_RIGHT_CH_NUM     48
+#define I2SC0_XDMAC_RX_RIGHT_CH_NUM     49
+#define I2SC1_XDMAC_TX_RIGHT_CH_NUM     50
+#define I2SC1_XDMAC_RX_RIGHT_CH_NUM     51
 
 
 
@@ -60,7 +76,6 @@
 * Variables
 ******************************************************************************/
 
-extern volatile uint8_t g_xdmac_tx_done, g_xdmac_rx_done;
 extern volatile uint8_t g_xdmac_channel_done[24]; /* Channel-specific completion flags */
 
 /******************************************************************************
