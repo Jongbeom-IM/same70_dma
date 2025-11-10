@@ -18,6 +18,18 @@
 #define XDMAC_USART0_RX_CH				2
 #define XDMAC_USART1_TX_CH				3
 #define XDMAC_USART1_RX_CH				4
+#define XDMAC_USART2_TX_CH				5
+#define XDMAC_USART2_RX_CH				6
+#define XDMAC_UART0_TX_CH				7
+#define XDMAC_UART0_RX_CH				8
+#define XDMAC_UART1_TX_CH				9
+#define XDMAC_UART1_RX_CH				10
+#define XDMAC_UART2_TX_CH				11
+#define XDMAC_UART2_RX_CH				12
+#define XDMAC_UART3_TX_CH				13
+#define XDMAC_UART3_RX_CH				14
+#define XDMAC_UART4_TX_CH				15
+#define XDMAC_UART4_RX_CH				16
 
 #define SPI0_XDMAC_TX_CH_NUM			1
 #define SPI0_XDMAC_RX_CH_NUM			2
@@ -35,9 +47,9 @@
 #define TWIHS0_XDMAC_TX_CH_NUM          14
 #define TWIHS0_XDMAC_RX_CH_NUM          15
 #define TWIHS1_XDMAC_TX_CH_NUM          16
-#define TWIHS1_XDMAC_TX_CH_NUM          17
+#define TWIHS1_XDMAC_RX_CH_NUM          17
 #define TWIHS2_XDMAC_TX_CH_NUM          18
-#define TWIHS2_XDMAC_TX_CH_NUM          19
+#define TWIHS2_XDMAC_RX_CH_NUM          19
 #define UART0_XDMAC_TX_CH_NUM			20
 #define UART0_XDMAC_RX_CH_NUM			21
 #define UART1_XDMAC_TX_CH_NUM			22
