@@ -26,8 +26,8 @@
  *  Global/Static Variables
  *****************************************************************************/
 
-/* Communication instance */
-static void *sp_drv_instance = NULL;
+/* Communication instance - currently unused */
+// static void *sp_drv_instance = NULL;
 
 
 
