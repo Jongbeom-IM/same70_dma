@@ -32,7 +32,7 @@ from collections import deque
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
-import matplotlib.animation as animation
+# import matplotlib.animation as animation  # 사용되지 않는 import 제거
 
 @dataclass
 class CommunicationStats:
@@ -92,6 +92,9 @@ class SAME70CommMonitor:
         self.stats = CommunicationStats()
         self.pending_packets: Dict[int, PendingPacket] = {}
         self.sequence_counter = 0
+        
+        # Timeout management for pending packets
+        self.packet_timeout = 5.0  # 5 seconds timeout
         
         # Real-time data for charts
         self.latency_history = deque(maxlen=100)
@@ -192,6 +195,10 @@ class SAME70CommMonitor:
         ttk.Label(status_frame, text="Data Rate:").grid(row=2, column=2, sticky=tk.W)
         self.data_rate_label = ttk.Label(status_frame, text="-- bytes/s")
         self.data_rate_label.grid(row=2, column=3, sticky=tk.W, padx=(5, 0))
+        
+        # Data rate tracking variables
+        self.last_data_time = time.time()
+        self.bytes_received = 0
     
     def setup_control_frame(self, parent):
         """Setup control buttons frame."""
@@ -273,10 +280,9 @@ class SAME70CommMonitor:
         self.latency_ax.set_ylabel("Latency (ms)")
         self.latency_ax.grid(True, alpha=0.3)
         
-        latency_canvas = FigureCanvasTkAgg(self.latency_fig, self.chart_notebook)
         latency_frame = ttk.Frame(self.chart_notebook)
+        latency_canvas = FigureCanvasTkAgg(self.latency_fig, latency_frame)
         latency_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        latency_canvas._tkcanvas.pack(fill=tk.BOTH, expand=True)
         self.chart_notebook.add(latency_frame, text="Latency")
         
         # Packet Loss chart
@@ -287,10 +293,9 @@ class SAME70CommMonitor:
         self.packet_loss_ax.set_ylabel("Loss Rate (%)")
         self.packet_loss_ax.grid(True, alpha=0.3)
         
-        packet_loss_canvas = FigureCanvasTkAgg(self.packet_loss_fig, self.chart_notebook)
         packet_loss_frame = ttk.Frame(self.chart_notebook)
+        packet_loss_canvas = FigureCanvasTkAgg(self.packet_loss_fig, packet_loss_frame)
         packet_loss_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        packet_loss_canvas._tkcanvas.pack(fill=tk.BOTH, expand=True)
         self.chart_notebook.add(packet_loss_frame, text="Packet Loss")
         
         # Store canvases for updates
@@ -435,9 +440,16 @@ class SAME70CommMonitor:
             while self.auto_test_var.get() and self.is_connected:
                 try:
                     interval = float(self.interval_var.get())
+                    if interval < 0.1:  # Minimum interval validation
+                        interval = 0.1
                     self.send_test_packet()
                     time.sleep(interval)
                 except ValueError:
+                    self.log_queue.put((time.time(), "Invalid interval value, stopping auto test", "error"))
+                    self.auto_test_var.set(False)
+                    break
+                except Exception as e:
+                    self.log_queue.put((time.time(), f"Auto test error: {e}", "error"))
                     break
         
         auto_thread = threading.Thread(target=auto_send, daemon=True)
@@ -450,6 +462,9 @@ class SAME70CommMonitor:
     def process_received_data(self, timestamp: float, data: str):
         """Process received data and update statistics."""
         self.log_message(f"RX: {data}", "rx")
+        
+        # Update data rate statistics
+        self.bytes_received += len(data)
         
         # Check if this is a response to a sent packet (contains sequence number)
         if '#' in data:
@@ -500,6 +515,14 @@ class SAME70CommMonitor:
             text=f"{self.stats.packet_loss_rate:.1f}% ({self.stats.packets_lost} lost)"
         )
         
+        # Update data rate (calculate every second)
+        current_time = time.time()
+        if current_time - self.last_data_time >= 1.0:
+            data_rate = self.bytes_received / (current_time - self.last_data_time)
+            self.data_rate_label.configure(text=f"{data_rate:.1f} bytes/s")
+            self.bytes_received = 0
+            self.last_data_time = current_time
+        
         # Update charts
         self.update_charts()
     
@@ -541,6 +564,9 @@ class SAME70CommMonitor:
             except queue.Empty:
                 pass
             
+            # Clean up timed-out packets
+            self.cleanup_timed_out_packets()
+            
             # Update GUI elements
             self.update_gui_elements()
             
@@ -571,6 +597,21 @@ class SAME70CommMonitor:
         self.packet_loss_history.clear()
         self.timestamp_history.clear()
         self.log_message("Statistics reset", "info")
+    
+    def cleanup_timed_out_packets(self):
+        """Clean up packets that have timed out."""
+        current_time = time.time()
+        timed_out_sequences = []
+        
+        for sequence, packet in self.pending_packets.items():
+            if current_time - packet.timestamp > self.packet_timeout:
+                timed_out_sequences.append(sequence)
+        
+        # Remove timed-out packets and count as lost
+        for sequence in timed_out_sequences:
+            del self.pending_packets[sequence]
+            self.stats.packets_lost += 1
+            self.stats.calculate_packet_loss()
     
     def clear_log(self):
         """Clear communication log."""

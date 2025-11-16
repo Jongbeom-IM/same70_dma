@@ -32,7 +32,7 @@ from collections import deque
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
-import matplotlib.animation as animation
+# import matplotlib.animation as animation  # 사용되지 않는 import 제거
 
 @dataclass
 class CommunicationStats:
@@ -91,6 +91,10 @@ class PortManager:
         # Real-time data for charts
         self.latency_history = deque(maxlen=100)
         self.packet_loss_history = deque(maxlen=100)
+        
+        # Timeout management
+        self.packet_timeout = 5.0  # 5 seconds timeout
+        self.last_cleanup_time = time.time()
     
     def connect(self, port: str, baudrate: int) -> bool:
         """Connect to specified port."""
@@ -115,7 +119,7 @@ class PortManager:
             
             return True
         except Exception as e:
-            print(f"Port {self.port_id} connection failed: {e}")
+            self.log_queue.put((time.time(), f"Port {self.port_id} connection failed: {e}", "error"))
             return False
     
     def disconnect(self):
@@ -208,6 +212,28 @@ class PortManager:
                 pass
         else:
             self.stats.packets_received += 1
+    
+    def cleanup_timed_out_packets(self):
+        """Clean up packets that have timed out."""
+        current_time = time.time()
+        
+        # Only cleanup every 2 seconds to reduce overhead
+        if current_time - self.last_cleanup_time < 2.0:
+            return
+            
+        timed_out_sequences = []
+        
+        for sequence, packet in self.pending_packets.items():
+            if current_time - packet.timestamp > self.packet_timeout:
+                timed_out_sequences.append(sequence)
+        
+        # Remove timed-out packets and count as lost
+        for sequence in timed_out_sequences:
+            del self.pending_packets[sequence]
+            self.stats.packets_lost += 1
+            self.stats.calculate_packet_loss()
+            
+        self.last_cleanup_time = current_time
 
 class MultiPortCommMonitor:
     """Main GUI application for multi-port SAME70-XPLD communication monitoring."""
@@ -578,9 +604,17 @@ class MultiPortCommMonitor:
             while widgets['auto_test_var'].get() and manager.is_connected:
                 try:
                     interval = float(widgets['interval_var'].get())
+                    if interval < 0.1:  # Minimum interval validation
+                        interval = 0.1
                     self.send_test_packet(port_id)
                     time.sleep(interval)
-                except (ValueError, AttributeError):
+                except ValueError:
+                    self.log_message(f"Port {port_id + 1}: Invalid interval value, stopping auto test", "error")
+                    widgets['auto_test_var'].set(False)
+                    break
+                except Exception as e:
+                    self.log_message(f"Port {port_id + 1}: Auto test error: {e}", "error")
+                    widgets['auto_test_var'].set(False)
                     break
         
         if port_id not in self.auto_test_threads or not self.auto_test_threads[port_id].is_alive():
@@ -630,44 +664,56 @@ class MultiPortCommMonitor:
     
     def update_charts(self):
         """Update real-time charts for all ports."""
+        # Only update charts if there's data to show
+        has_latency_data = any(len(manager.latency_history) > 1 for manager in self.port_managers)
+        has_packet_loss_data = any(len(manager.packet_loss_history) > 1 for manager in self.port_managers)
+        
+        if not has_latency_data and not has_packet_loss_data:
+            return
+            
         # Update latency chart
-        self.latency_ax.clear()
-        colors = ['blue', 'red', 'green', 'orange', 'purple', 'brown']
+        if has_latency_data:
+            self.latency_ax.clear()
+            colors = ['blue', 'red', 'green', 'orange', 'purple', 'brown']
+            
+            for port_id, manager in enumerate(self.port_managers):
+                if len(manager.latency_history) > 1:
+                    self.latency_ax.plot(
+                        list(manager.latency_history), 
+                        color=colors[port_id],
+                        linewidth=2, 
+                        label=f'Port {port_id + 1}',
+                        alpha=0.8
+                    )
         
-        for port_id, manager in enumerate(self.port_managers):
-            if len(manager.latency_history) > 1:
-                self.latency_ax.plot(
-                    list(manager.latency_history), 
-                    color=colors[port_id],
-                    linewidth=2, 
-                    label=f'Port {port_id + 1}'
-                )
-        
-        self.latency_ax.set_title("Latency Comparison (All Ports)")
-        self.latency_ax.set_xlabel("Sample Number")
-        self.latency_ax.set_ylabel("Latency (ms)")
-        self.latency_ax.grid(True, alpha=0.3)
-        self.latency_ax.legend()
-        self.latency_canvas.draw()
+            self.latency_ax.set_title("Latency Comparison (All Ports)")
+            self.latency_ax.set_xlabel("Sample Number")
+            self.latency_ax.set_ylabel("Latency (ms)")
+            self.latency_ax.grid(True, alpha=0.3)
+            self.latency_ax.legend()
+            self.latency_canvas.draw()
         
         # Update packet loss chart
-        self.packet_loss_ax.clear()
+        if has_packet_loss_data:
+            self.packet_loss_ax.clear()
+            colors = ['blue', 'red', 'green', 'orange', 'purple', 'brown']
+            
+            for port_id, manager in enumerate(self.port_managers):
+                if len(manager.packet_loss_history) > 1:
+                    self.packet_loss_ax.plot(
+                        list(manager.packet_loss_history), 
+                        color=colors[port_id],
+                        linewidth=2, 
+                        label=f'Port {port_id + 1}',
+                        alpha=0.8
+                    )
         
-        for port_id, manager in enumerate(self.port_managers):
-            if len(manager.packet_loss_history) > 1:
-                self.packet_loss_ax.plot(
-                    list(manager.packet_loss_history), 
-                    color=colors[port_id],
-                    linewidth=2, 
-                    label=f'Port {port_id + 1}'
-                )
-        
-        self.packet_loss_ax.set_title("Packet Loss Rate Comparison (All Ports)")
-        self.packet_loss_ax.set_xlabel("Sample Number")
-        self.packet_loss_ax.set_ylabel("Loss Rate (%)")
-        self.packet_loss_ax.grid(True, alpha=0.3)
-        self.packet_loss_ax.legend()
-        self.packet_loss_canvas.draw()
+            self.packet_loss_ax.set_title("Packet Loss Rate Comparison (All Ports)")
+            self.packet_loss_ax.set_xlabel("Sample Number")
+            self.packet_loss_ax.set_ylabel("Loss Rate (%)")
+            self.packet_loss_ax.grid(True, alpha=0.3)
+            self.packet_loss_ax.legend()
+            self.packet_loss_canvas.draw()
     
     def start_gui_update_timer(self):
         """Start periodic GUI update timer."""
@@ -689,6 +735,9 @@ class MultiPortCommMonitor:
                         self.log_message(f"Port {port_id + 1}: {message}", tag)
                 except queue.Empty:
                     pass
+                
+                # Cleanup timed-out packets
+                manager.cleanup_timed_out_packets()
             
             # Update GUI elements
             self.update_gui_elements()
