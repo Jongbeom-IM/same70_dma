@@ -1,0 +1,22 @@
+# SAME70 UART Communication Tool Requirements
+
+# Core communication
+pyserial>=3.5
+
+# GUI and visualization
+matplotlib>=3.5.0
+numpy>=1.21.0
+# tkinter is included with Python by default
+
+# Optional advanced GUI (if needed)
+pyside6>=6.0  # Alternative modern GUI framework
+
+# Utility libraries
+click>=8.0  # For command-line interface
+colorama>=0.4.4  # For colored terminal output
+tqdm>=4.62.0  # For progress bars
+python-dateutil>=2.8.0  # For timestamp handling
+
+# Data handling and analysis
+pandas>=1.5.0  # For data analysis and export
+xlsxwriter>=3.0.0  # For Excel export
