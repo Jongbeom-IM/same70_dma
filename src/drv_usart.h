@@ -21,5 +21,6 @@
 
 extern uint32_t DRV_USART_Comm_Init(Usart *pusart, uint32_t baudrate);
 extern uint32_t DRV_USART_Comm_Fin(Usart *pusart);
+extern uint32_t DRV_UART_Comm_Init(Uart *puart, uint32_t baudrate);
 
 #endif	/* End of __DRV_SAM_S70_E70_V71_USART_H__ */

@@ -1,0 +1,130 @@
+@startuml SAME70_XDMAC_Async_Sequence
+title SAME70 XDMAC Asynchronous Multi-Channel System (Real DMA Benefits)
+
+participant Main as main
+participant Console as configure_console
+participant USART_Init as DRV_USART_Comm_Init
+participant UART_Init as DRV_UART_Comm_Init
+participant USART_DMA as DRV_USART_DMA_Send_Recv
+participant UART_DMA as DRV_UART_DMA_Send_Recv
+participant XDMAC as XDMAC_Controller
+participant Handler as XDMAC_Handler
+participant NVIC as NVIC_Controller
+
+note over Main : System Initialization Phase
+Main -> Main : sysclk_init()
+Main -> Main : board_init()
+Main -> Console : configure_console()
+Main -> Main : pmc_enable_periph_clk(ID_XDMAC)
+
+note over Main : USART/UART Initialization (8 channels)
+loop All 8 Channels Init
+    Main -> USART_Init : DRV_USART_Comm_Init() / DRV_UART_Comm_Init()
+    USART_Init -> USART_Init : Setup GPIO, Enable Peripheral, Configure
+    USART_Init --> Main : 0 (success)
+end
+
+note over Main : **IDEAL DMA USAGE** - Asynchronous Multi-Channel Operation
+loop while(1)
+    Main -> Main : ioport_toggle_pin_level(LED_0_PIN)
+
+    == **Concurrent DMA Setup Phase** ==
+    note over Main, XDMAC : **START ALL 8 CHANNELS CONCURRENTLY** (Non-blocking)
+    
+    Main -> USART_DMA : **Start USART0 TX** (Non-blocking)
+    activate USART_DMA
+    USART_DMA -> XDMAC : Setup & Enable DMA Channel 1
+    activate XDMAC
+    USART_DMA --> Main : **IMMEDIATE RETURN** (DMA running in background)
+    deactivate USART_DMA
+    
+    Main -> USART_DMA : **Start USART0 RX** (Non-blocking) 
+    activate USART_DMA
+    USART_DMA -> XDMAC : Setup & Enable DMA Channel 2
+    USART_DMA --> Main : **IMMEDIATE RETURN** (DMA running in background)
+    deactivate USART_DMA
+    
+    Main -> UART_DMA : **Start UART0 TX** (Non-blocking)
+    activate UART_DMA
+    UART_DMA -> XDMAC : Setup & Enable DMA Channel 7
+    UART_DMA --> Main : **IMMEDIATE RETURN** (DMA running in background)
+    deactivate UART_DMA
+    
+    note over Main : **ALL 8 CHANNELS STARTED IN PARALLEL**
+    note over Main : **CPU FREE TO DO OTHER WORK!**
+    
+    == **CPU Does Other Work While DMA Transfers** ==
+    Main -> Main : **Process other tasks** (calculations, GPIO, etc.)
+    Main -> Main : **Handle other interrupts**
+    Main -> Main : **Execute application logic**
+    
+    == **Background DMA Transfers** ==
+    note over XDMAC : **DMA Channel 1**: USART0 TX → Memory to Peripheral
+    note over XDMAC : **DMA Channel 2**: USART0 RX → Peripheral to Memory  
+    note over XDMAC : **DMA Channel 7**: UART0 TX → Memory to Peripheral
+    note over XDMAC : **ALL OTHER CHANNELS** running simultaneously
+    
+    == **Interrupt-Driven Completion** ==
+    XDMAC --> Handler : **Channel 1 Complete Interrupt**
+    activate Handler
+    Handler -> Handler : g_xdmac_channel_done[1] = 1
+    deactivate Handler
+    
+    XDMAC --> Handler : **Channel 2 Complete Interrupt**
+    activate Handler  
+    Handler -> Handler : g_xdmac_channel_done[2] = 1
+    deactivate Handler
+    
+    XDMAC --> Handler : **Channel 7 Complete Interrupt**
+    activate Handler
+    Handler -> Handler : g_xdmac_channel_done[7] = 1
+    deactivate Handler
+    
+    note over Handler : **All channels complete independently**
+    
+    == **Check Results (Non-blocking)** ==
+    Main -> Main : **Check USART0 TX Status**
+    alt DMA Complete
+        Main -> Main : Process USART0 TX completion
+    else Still Running
+        Main -> Main : Continue other work
+    end
+    
+    Main -> Main : **Check USART0 RX Status**  
+    alt Data Received
+        Main -> Main : Process received data
+    else No Data Yet
+        Main -> Main : Continue other work
+    end
+    
+    deactivate XDMAC
+    Main -> Main : delay_ms(1000)
+end
+
+note over Main, Handler : **KEY DMA BENEFITS SHOWN:**
+note over Main, Handler : ✅ **Non-blocking**: CPU free during transfers
+note over Main, Handler : ✅ **Concurrent**: 8 channels operate simultaneously  
+note over Main, Handler : ✅ **Interrupt-driven**: Efficient completion notification
+note over Main, Handler : ✅ **Scalable**: Easy to add more channels
+
+== **Current Implementation Problem** ==
+note over Main, USART_DMA : **CURRENT CODE ISSUE**: Blocking wait loops
+note over Main, USART_DMA : ❌ while(timeout--) { if(channel_done) break; }
+note over Main, USART_DMA : ❌ This defeats DMA's purpose!
+
+== **Recommended Improvement** ==
+note over Main, Handler : **BETTER APPROACH**: Event-driven or callback-based
+note over Main, Handler : ✅ Start DMA → Return immediately
+note over Main, Handler : ✅ Use interrupts or polling in main loop
+note over Main, Handler : ✅ Process completion when ready
+
+group XDMAC_Handler() - Interrupt Processing
+    Handler -> Handler : global_status = XDMAC->XDMAC_GIS
+    loop Active Channels Processing
+        Handler -> Handler : channel = __builtin_ctz(global_status)
+        Handler -> Handler : channel_status = XDMAC_CIS
+        Handler -> Handler : if (XDMAC_CIS_BIS) set done flag
+    end
+end
+
+@enduml
