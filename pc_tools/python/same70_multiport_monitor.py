@@ -34,6 +34,42 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 # import matplotlib.animation as animation  # 사용되지 않는 import 제거
 
+class ToolTip:
+    """Simple tooltip widget for providing helpful hints."""
+    
+    def __init__(self, widget, text='widget info'):
+        self.widget = widget
+        self.text = text
+        self.widget.bind("<Enter>", self.enter)
+        self.widget.bind("<Leave>", self.leave)
+        self.tipwindow = None
+        
+    def enter(self, event=None):
+        self.show_tip()
+        
+    def leave(self, event=None):
+        self.hide_tip()
+        
+    def show_tip(self):
+        if self.tipwindow or not self.text:
+            return
+        x, y, cx, cy = self.widget.bbox("insert")
+        x = x + self.widget.winfo_rootx() + 25
+        y = y + cy + self.widget.winfo_rooty() + 25
+        self.tipwindow = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry("+%d+%d" % (x, y))
+        label = tk.Label(tw, text=self.text, justify=tk.LEFT,
+                        background="#ffffe0", relief=tk.SOLID, borderwidth=1,
+                        font=("tahoma", 8, "normal"))
+        label.pack(ipadx=1)
+        
+    def hide_tip(self):
+        tw = self.tipwindow
+        self.tipwindow = None
+        if tw:
+            tw.destroy()
+
 @dataclass
 class CommunicationStats:
     """Communication statistics data structure."""
@@ -252,8 +288,9 @@ class MultiPortCommMonitor:
         self.setup_gui()
         self.start_gui_update_timer()
         
-        # Auto-refresh COM ports
+        # Auto-refresh COM ports and setup periodic refresh
         self.refresh_com_ports()
+        self.setup_auto_port_detection()
         
     def setup_gui(self):
         """Setup the main GUI interface."""
@@ -314,14 +351,27 @@ class MultiPortCommMonitor:
         # Port selection widgets
         widgets = {}
         
-        # COM Port
+        # COM Port with Reload button
         ttk.Label(port_frame, text="COM Port:").grid(row=0, column=0, sticky="w", padx=(0, 5))
         widgets['port_var'] = tk.StringVar()
         widgets['port_combo'] = ttk.Combobox(port_frame, textvariable=widgets['port_var'], width=12)
-        widgets['port_combo'].grid(row=0, column=1, sticky="w", padx=(0, 10))
+        widgets['port_combo'].grid(row=0, column=1, sticky="w", padx=(0, 5))
+        
+        # Reload button for COM ports
+        widgets['reload_btn'] = ttk.Button(
+            port_frame, 
+            text="🔄", 
+            width=3,
+            command=self.refresh_com_ports
+        )
+        widgets['reload_btn'].grid(row=0, column=2, sticky="w", padx=(0, 10))
+        
+        # Add tooltip for reload button
+        self.create_tooltip(widgets['reload_btn'], 
+                           "Refresh COM port list\n• Detects newly connected USB devices\n• Updates all port dropdown lists\n• Auto-assigns available ports")
         
         # Baudrate
-        ttk.Label(port_frame, text="Baudrate:").grid(row=0, column=2, sticky="w", padx=(0, 5))
+        ttk.Label(port_frame, text="Baudrate:").grid(row=0, column=3, sticky="w", padx=(0, 5))
         widgets['baudrate_var'] = tk.StringVar(value="115200")
         widgets['baudrate_combo'] = ttk.Combobox(
             port_frame, 
@@ -329,7 +379,7 @@ class MultiPortCommMonitor:
             width=10,
             values=["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"]
         )
-        widgets['baudrate_combo'].grid(row=0, column=3, sticky="w", padx=(0, 10))
+        widgets['baudrate_combo'].grid(row=0, column=4, sticky="w", padx=(0, 10))
         
         # Connection button
         widgets['connect_btn'] = ttk.Button(
@@ -337,17 +387,17 @@ class MultiPortCommMonitor:
             text="🔌 Connect", 
             command=lambda p=port_id: self.toggle_port_connection(p)
         )
-        widgets['connect_btn'].grid(row=0, column=4, padx=(0, 10))
+        widgets['connect_btn'].grid(row=0, column=5, padx=(0, 10))
         
         # Status indicator
         widgets['status_label'] = ttk.Label(port_frame, text="❌ Disconnected", foreground="red")
-        widgets['status_label'].grid(row=0, column=5, sticky="w")
+        widgets['status_label'].grid(row=0, column=6, sticky="w")
         
         # Test controls
         ttk.Label(port_frame, text="Test Command:").grid(row=1, column=0, sticky="w", padx=(0, 5), pady=(5, 0))
         widgets['cmd_var'] = tk.StringVar(value=f"TEST_P{port_id + 1}")
         widgets['cmd_entry'] = ttk.Entry(port_frame, textvariable=widgets['cmd_var'], width=15)
-        widgets['cmd_entry'].grid(row=1, column=1, sticky="w", padx=(0, 10), pady=(5, 0))
+        widgets['cmd_entry'].grid(row=1, column=1, columnspan=2, sticky="w", padx=(0, 10), pady=(5, 0))
         widgets['cmd_entry'].bind('<Return>', lambda e, p=port_id: self.send_test_packet(p))
         
         # Send button
@@ -356,7 +406,7 @@ class MultiPortCommMonitor:
             text="📤 Send", 
             command=lambda p=port_id: self.send_test_packet(p)
         )
-        widgets['send_btn'].grid(row=1, column=2, padx=(0, 10), pady=(5, 0))
+        widgets['send_btn'].grid(row=1, column=3, padx=(0, 10), pady=(5, 0))
         
         # Auto test checkbox
         widgets['auto_test_var'] = tk.BooleanVar()
@@ -366,13 +416,13 @@ class MultiPortCommMonitor:
             variable=widgets['auto_test_var'],
             command=lambda p=port_id: self.toggle_auto_test(p)
         )
-        widgets['auto_test_cb'].grid(row=1, column=3, pady=(5, 0))
+        widgets['auto_test_cb'].grid(row=1, column=4, pady=(5, 0))
         
         # Auto test interval
-        ttk.Label(port_frame, text="Interval(s):").grid(row=1, column=4, sticky="w", padx=(5, 5), pady=(5, 0))
+        ttk.Label(port_frame, text="Interval(s):").grid(row=1, column=5, sticky="w", padx=(5, 5), pady=(5, 0))
         widgets['interval_var'] = tk.StringVar(value="1.0")
         widgets['interval_entry'] = ttk.Entry(port_frame, textvariable=widgets['interval_var'], width=6)
-        widgets['interval_entry'].grid(row=1, column=5, sticky="w", pady=(5, 0))
+        widgets['interval_entry'].grid(row=1, column=6, sticky="w", pady=(5, 0))
         
         self.port_widgets[port_id] = widgets
     
@@ -531,19 +581,117 @@ class MultiPortCommMonitor:
         packet_loss_canvas.get_tk_widget().pack(fill="both", expand=True)
         self.packet_loss_canvas = packet_loss_canvas
     
+    def setup_auto_port_detection(self):
+        """Setup automatic port detection and monitoring."""
+        # Store current ports for comparison
+        self.last_known_ports = set()
+        
+        # Start periodic port monitoring
+        self.monitor_ports()
+        
+    def monitor_ports(self):
+        """Monitor for USB device changes and auto-refresh ports."""
+        try:
+            current_ports = set(port.device for port in serial.tools.list_ports.comports())
+            
+            # Check if ports have changed
+            if current_ports != self.last_known_ports:
+                added_ports = current_ports - self.last_known_ports
+                removed_ports = self.last_known_ports - current_ports
+                
+                if added_ports or removed_ports:
+                    # Log the changes
+                    if hasattr(self, 'log_text'):
+                        timestamp = datetime.now().strftime("%H:%M:%S")
+                        if added_ports:
+                            for port in added_ports:
+                                self.log_text.insert(tk.END, f"[{timestamp}] ➕ New USB device detected: {port}\n")
+                        if removed_ports:
+                            for port in removed_ports:
+                                self.log_text.insert(tk.END, f"[{timestamp}] ➖ USB device removed: {port}\n")
+                        self.log_text.see(tk.END)
+                    
+                    # Auto-refresh ports
+                    self.refresh_com_ports()
+                    
+                self.last_known_ports = current_ports
+                
+        except Exception as e:
+            pass  # Silently handle errors in background monitoring
+        
+        # Schedule next check in 2 seconds
+        self.root.after(2000, self.monitor_ports)
+
     def refresh_com_ports(self):
         """Refresh available COM ports for all port widgets."""
-        ports = [port.device for port in serial.tools.list_ports.comports()]
-        
-        for widgets in self.port_widgets.values():
-            widgets['port_combo']['values'] = ports
-            if ports and not widgets['port_var'].get():
-                # Auto-assign different ports if available
-                port_index = list(self.port_widgets.keys()).index(
-                    next(k for k, v in self.port_widgets.items() if v == widgets)
-                )
-                if port_index < len(ports):
-                    widgets['port_var'].set(ports[port_index])
+        try:
+            # Get detailed port information
+            port_info = serial.tools.list_ports.comports()
+            ports = []
+            port_descriptions = {}
+            
+            for port in port_info:
+                ports.append(port.device)
+                # Store description for tooltip or display
+                desc = f"{port.device}"
+                if port.description and port.description != 'n/a':
+                    desc += f" - {port.description}"
+                if port.manufacturer and port.manufacturer != 'n/a':
+                    desc += f" ({port.manufacturer})"
+                port_descriptions[port.device] = desc
+            
+            # Update all port combo boxes
+            current_selections = {}
+            for port_id, widgets in self.port_widgets.items():
+                # Save current selection
+                current_selections[port_id] = widgets['port_var'].get()
+                
+                # Update combo box values
+                widgets['port_combo']['values'] = ports
+                
+                # If current selection is no longer available, clear it
+                if current_selections[port_id] and current_selections[port_id] not in ports:
+                    widgets['port_var'].set('')
+                    # Update status if port was connected
+                    if self.port_managers[port_id].is_connected:
+                        widgets['status_label'].config(text="⚠️ Port Lost", foreground="orange")
+                        # Attempt to disconnect cleanly
+                        self.port_managers[port_id].disconnect()
+                        widgets['connect_btn'].configure(text="🔌 Connect")
+                
+                # Auto-assign ports for empty selections
+                if not widgets['port_var'].get() and ports:
+                    # Find an unassigned port
+                    used_ports = [w['port_var'].get() for w in self.port_widgets.values() 
+                                 if w['port_var'].get()]
+                    available_ports = [p for p in ports if p not in used_ports]
+                    if available_ports:
+                        widgets['port_var'].set(available_ports[0])
+            
+            # Show status message (only for manual refresh)
+            if not hasattr(self, '_auto_refresh_in_progress'):
+                ports_count = len(ports)
+                if hasattr(self, 'log_text'):
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    self.log_text.insert(tk.END, f"[{timestamp}] 🔄 COM ports refreshed: {ports_count} port(s) found\n")
+                    if ports:
+                        for port, desc in port_descriptions.items():
+                            self.log_text.insert(tk.END, f"[{timestamp}]    📍 {desc}\n")
+                    self.log_text.see(tk.END)
+                
+                # Flash reload buttons to show action completed
+                for widgets in self.port_widgets.values():
+                    reload_btn = widgets['reload_btn']
+                    original_text = reload_btn['text']
+                    reload_btn.config(text="✓", foreground="green")
+                    self.root.after(500, lambda btn=reload_btn, txt=original_text: 
+                                   btn.config(text=txt, foreground="black"))
+                               
+        except Exception as e:
+            if hasattr(self, 'log_text'):
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                self.log_text.insert(tk.END, f"[{timestamp}] ❌ Error refreshing COM ports: {e}\n")
+                self.log_text.see(tk.END)
     
     def toggle_port_connection(self, port_id):
         """Toggle connection for specified port."""
@@ -805,6 +953,10 @@ class MultiPortCommMonitor:
                 
             except Exception as e:
                 messagebox.showerror("Save Error", f"Failed to save log: {e}")
+    
+    def create_tooltip(self, widget, text):
+        """Create a tooltip for the given widget."""
+        return ToolTip(widget, text)
     
     def on_closing(self):
         """Handle application closing."""

@@ -11,6 +11,10 @@
 #include "drv_usart_xdmac.h"
 #include "drv_uart_xdmac.h"
 #include "drv_usart.h"
+#include "delay.h"
+
+/* Simple timing counter for demo purposes */
+static volatile uint32_t demo_tick_counter = 0;
 
 #ifdef DEBUG
 #include <stdio.h>
@@ -90,7 +94,7 @@ void perform_cpu_intensive_task(void)
 ******************************************************************************/
 void start_all_dma_transmissions(void)
 {
-	uint32_t current_time = systick_get();
+	uint32_t current_time = demo_tick_counter++;
 	
 	DEMO_Debug(("=== Starting Concurrent DMA Transmissions ===\r\n"));
 	
@@ -152,7 +156,7 @@ void start_all_dma_transmissions(void)
 ******************************************************************************/
 void check_dma_completions(void)
 {
-	uint32_t current_time = systick_get();
+	uint32_t current_time = demo_tick_counter++;
 	
 	/* Check USART completions */
 	for (int i = 0; i < 3; i++) {
@@ -219,7 +223,7 @@ void performance_analysis_demo(void)
 	initial_cpu_tasks = cpu_task_counter;
 	
 	/* Start all DMA operations concurrently */
-	start_time = systick_get();
+	start_time = demo_tick_counter++;
 	start_all_dma_transmissions();
 	
 	/* While DMA operates in background, CPU can do other work */
@@ -233,7 +237,7 @@ void performance_analysis_demo(void)
 		check_dma_completions();
 	}
 	
-	end_time = systick_get();
+	end_time = demo_tick_counter++;
 	
 	/* Show performance results */
 	uint32_t total_time = end_time - start_time;
@@ -261,7 +265,7 @@ void blocking_vs_nonblocking_comparison(void)
 	/* Test 1: Blocking approach (sequential) */
 	DEMO_Debug(("Test 1: BLOCKING approach (one channel at a time)\r\n"));
 	cpu_task_counter = 0;
-	blocking_start = systick_get();
+	blocking_start = demo_tick_counter++;
 	
 	/* Sequential blocking operations - CPU is blocked during each */
 	DRV_USART_DMA_Send(USART0, usart0_tx_buf, sizeof(usart0_tx_buf), 10000);
@@ -269,7 +273,7 @@ void blocking_vs_nonblocking_comparison(void)
 	DRV_UART_DMA_Send(UART0, uart0_tx_buf, sizeof(uart0_tx_buf), 10000);
 	DRV_UART_DMA_Send(UART1, uart1_tx_buf, sizeof(uart1_tx_buf), 10000);
 	
-	blocking_end = systick_get();
+	blocking_end = demo_tick_counter++;
 	blocking_tasks = cpu_task_counter;
 	
 	/* Delay for comparison */
@@ -278,7 +282,7 @@ void blocking_vs_nonblocking_comparison(void)
 	/* Test 2: Non-blocking approach (concurrent) */
 	DEMO_Debug(("Test 2: NON-BLOCKING approach (all channels simultaneously)\r\n"));
 	cpu_task_counter = 0;
-	nonblocking_start = systick_get();
+	nonblocking_start = demo_tick_counter++;
 	
 	/* Start all transfers concurrently */
 	DRV_USART_DMA_Send_Start(USART0, usart0_tx_buf, sizeof(usart0_tx_buf));
@@ -294,7 +298,7 @@ void blocking_vs_nonblocking_comparison(void)
 		perform_cpu_intensive_task();
 	}
 	
-	nonblocking_end = systick_get();
+	nonblocking_end = demo_tick_counter++;
 	nonblocking_tasks = cpu_task_counter;
 	
 	/* Show comparison results */

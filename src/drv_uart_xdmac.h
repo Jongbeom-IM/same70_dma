@@ -1,5 +1,5 @@
-#ifndef __DRV_SAM_S70_E70_V71_XDMAC_USART_H__
-#define __DRV_SAM_S70_E70_V71_XDMAC_USART_H__
+#ifndef __DRV_SAM_S70_E70_V71_XDMAC_UART_H__
+#define __DRV_SAM_S70_E70_V71_XDMAC_UART_H__
 
 
 /******************************************************************************
@@ -35,4 +35,4 @@ extern uint32_t DRV_UART_DMA_Recv_IsComplete(Uart *);
 extern uint32_t DRV_UART_DMA_Send_Abort(Uart *);
 extern uint32_t DRV_UART_DMA_Recv_Abort(Uart *);
 
-#endif	/* End of __DRV_SAM_S70_E70_V71_XDMAC_USART_H__ */
+#endif	/* End of __DRV_SAM_S70_E70_V71_XDMAC_UART_H__ */
