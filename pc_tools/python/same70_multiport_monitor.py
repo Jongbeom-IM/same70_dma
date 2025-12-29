@@ -280,9 +280,10 @@ class MultiPortCommMonitor:
         self.root.geometry("1400x1000")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        # Port managers
-        self.port_managers = [PortManager(i) for i in range(6)]
+        # Port managers (6 slave devices + 1 master device)
+        self.port_managers = [PortManager(i) for i in range(7)]
         self.auto_test_threads = {}
+        self.command_lists = {}  # Store command lists for each port
         
         # GUI setup
         self.setup_gui()
@@ -331,8 +332,8 @@ class MultiPortCommMonitor:
         # Store GUI elements for each port
         self.port_widgets = {}
         
-        # Create configuration widgets for each port
-        for i in range(6):
+        # Create configuration widgets for each port (6 slaves + 1 master)
+        for i in range(7):
             self.create_port_config_group(scrollable_frame, i)
         
         # Pack scrollable elements
@@ -342,7 +343,9 @@ class MultiPortCommMonitor:
     def create_port_config_group(self, parent, port_id):
         """Create configuration group for a single port."""
         # Port frame
-        port_frame = ttk.LabelFrame(parent, text=f"📡 Port {port_id + 1}", padding="10")
+        is_master = (port_id == 6)
+        port_label = f"👑 Master Device (Port {port_id + 1})" if is_master else f"📡 Port {port_id + 1}"
+        port_frame = ttk.LabelFrame(parent, text=port_label, padding="10")
         port_frame.pack(fill="x", padx=5, pady=5)
         
         # Configure grid
@@ -397,8 +400,17 @@ class MultiPortCommMonitor:
         ttk.Label(port_frame, text="Test Command:").grid(row=1, column=0, sticky="w", padx=(0, 5), pady=(5, 0))
         widgets['cmd_var'] = tk.StringVar(value=f"TEST_P{port_id + 1}")
         widgets['cmd_entry'] = ttk.Entry(port_frame, textvariable=widgets['cmd_var'], width=15)
-        widgets['cmd_entry'].grid(row=1, column=1, columnspan=2, sticky="w", padx=(0, 10), pady=(5, 0))
+        widgets['cmd_entry'].grid(row=1, column=1, columnspan=2, sticky="ew", padx=(0, 5), pady=(5, 0))
         widgets['cmd_entry'].bind('<Return>', lambda e, p=port_id: self.send_test_packet(p))
+        
+        # Load Commands button
+        widgets['load_btn'] = ttk.Button(
+            port_frame,
+            text="📁 Load",
+            width=6,
+            command=lambda p=port_id: self.load_commands_from_file(p)
+        )
+        widgets['load_btn'].grid(row=1, column=2, sticky="e", padx=(0, 5), pady=(5, 0))
         
         # Send button
         widgets['send_btn'] = ttk.Button(
@@ -447,8 +459,8 @@ class MultiPortCommMonitor:
         # Store status widgets
         self.status_widgets = {}
         
-        # Create status displays for each port
-        for i in range(6):
+        # Create status displays for each port (6 slaves + 1 master)
+        for i in range(7):
             self.create_port_status_group(scrollable_frame, i)
         
         # Pack scrollable elements
@@ -458,7 +470,9 @@ class MultiPortCommMonitor:
     def create_port_status_group(self, parent, port_id):
         """Create status display group for a single port."""
         # Status frame
-        status_frame = ttk.LabelFrame(parent, text=f"📊 Port {port_id + 1} Statistics", padding="10")
+        is_master = (port_id == 6)
+        status_label = f"📊 Master Device Statistics" if is_master else f"📊 Port {port_id + 1} Statistics"
+        status_frame = ttk.LabelFrame(parent, text=status_label, padding="10")
         status_frame.pack(fill="x", padx=5, pady=5)
         
         # Configure grid
@@ -509,11 +523,12 @@ class MultiPortCommMonitor:
         # Port filter
         ttk.Label(control_frame, text="Show Port:").pack(side="left")
         self.log_filter_var = tk.StringVar(value="All")
+        filter_values = ["All"] + [f"Port {i+1}" for i in range(6)] + ["Master Device"]
         log_filter = ttk.Combobox(
             control_frame, 
             textvariable=self.log_filter_var, 
-            values=["All"] + [f"Port {i+1}" for i in range(6)],
-            width=10
+            values=filter_values,
+            width=15
         )
         log_filter.pack(side="left", padx=(5, 20))
         
@@ -716,13 +731,52 @@ class MultiPortCommMonitor:
             self.status_widgets[port_id]['conn_status'].configure(text="❌ Disconnected", foreground="red")
             self.log_message(f"Port {port_id + 1}: Disconnected", "info")
     
+    def load_commands_from_file(self, port_id):
+        """Load commands from txt file."""
+        filename = filedialog.askopenfilename(
+            title=f"Load Commands for Port {port_id + 1}",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+        )
+        
+        if filename:
+            try:
+                with open(filename, 'r', encoding='utf-8') as f:
+                    commands = [line.strip() for line in f if line.strip()]
+                
+                if commands:
+                    self.command_lists[port_id] = {
+                        'commands': commands,
+                        'current_index': 0,
+                        'filename': filename.split('/')[-1]
+                    }
+                    
+                    # Update command entry to show first command
+                    widgets = self.port_widgets[port_id]
+                    widgets['cmd_var'].set(commands[0])
+                    
+                    port_name = "Master Device" if port_id == 6 else f"Port {port_id + 1}"
+                    self.log_message(
+                        f"{port_name}: Loaded {len(commands)} commands from {self.command_lists[port_id]['filename']}",
+                        "info"
+                    )
+                    messagebox.showinfo(
+                        "Commands Loaded",
+                        f"Loaded {len(commands)} commands for {port_name}"
+                    )
+                else:
+                    messagebox.showwarning("Empty File", "The selected file is empty.")
+                    
+            except Exception as e:
+                messagebox.showerror("Load Error", f"Failed to load commands: {e}")
+    
     def send_test_packet(self, port_id):
         """Send test packet on specified port."""
         manager = self.port_managers[port_id]
         widgets = self.port_widgets[port_id]
         
         if not manager.is_connected:
-            messagebox.showwarning("Not Connected", f"Port {port_id + 1} is not connected.")
+            port_name = "Master Device" if port_id == 6 else f"Port {port_id + 1}"
+            messagebox.showwarning("Not Connected", f"{port_name} is not connected.")
             return
         
         command = widgets['cmd_var'].get()
@@ -748,20 +802,42 @@ class MultiPortCommMonitor:
         def auto_send():
             widgets = self.port_widgets[port_id]
             manager = self.port_managers[port_id]
+            port_name = "Master Device" if port_id == 6 else f"Port {port_id + 1}"
+            
+            # Check if command list is loaded
+            use_command_list = port_id in self.command_lists
             
             while widgets['auto_test_var'].get() and manager.is_connected:
                 try:
                     interval = float(widgets['interval_var'].get())
                     if interval < 0.1:  # Minimum interval validation
                         interval = 0.1
-                    self.send_test_packet(port_id)
+                    
+                    # Use command list if loaded, otherwise use manual command
+                    if use_command_list:
+                        cmd_data = self.command_lists[port_id]
+                        command = cmd_data['commands'][cmd_data['current_index']]
+                        
+                        # Update UI to show current command
+                        widgets['cmd_var'].set(command)
+                        
+                        # Send current command
+                        if manager.is_connected:
+                            manager.send_packet(command)
+                        
+                        # Move to next command (circular)
+                        cmd_data['current_index'] = (cmd_data['current_index'] + 1) % len(cmd_data['commands'])
+                    else:
+                        # Use manual command from entry
+                        self.send_test_packet(port_id)
+                    
                     time.sleep(interval)
                 except ValueError:
-                    self.log_message(f"Port {port_id + 1}: Invalid interval value, stopping auto test", "error")
+                    self.log_message(f"{port_name}: Invalid interval value, stopping auto test", "error")
                     widgets['auto_test_var'].set(False)
                     break
                 except Exception as e:
-                    self.log_message(f"Port {port_id + 1}: Auto test error: {e}", "error")
+                    self.log_message(f"{port_name}: Auto test error: {e}", "error")
                     widgets['auto_test_var'].set(False)
                     break
         
