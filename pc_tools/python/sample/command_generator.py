@@ -302,7 +302,7 @@ if __name__ == "__main__":
     
     # Generate test command file
     print("\n🔨 Generating test commands...")
-    generate_test_commands('sample/commands.txt')
+    generate_test_commands('commands.txt')
     
     print("\n✅ Command generator ready!")
     print("\nUsage example:")
