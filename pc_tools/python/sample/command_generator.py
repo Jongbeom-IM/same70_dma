@@ -22,6 +22,7 @@ import struct
 import binascii
 from typing import List, Optional
 from enum import IntEnum
+import argparse
 
 
 class PacketType(IntEnum):
@@ -223,8 +224,15 @@ class CommandGenerator:
             'crc': f'0x{crc:04X}' if crc is not None else 'N/A'
         }
 
+def sample_command(type: str):
+    # 65바이트 길이: "This is hepms soh " (18) + "0"*46 + "1"
+    def cmd_gen(cmd, le):
+        
+        
+    T1_SOH = b"THIS_IS_HEPMS_T1_SOH_" + b"0" * 46 + b"1"  # Total: 65 bytes
+    return T1_SOH
 
-def generate_test_commands(output_file: str = 'commands.txt'):
+def generate_test_commands(output_file: str = 'commands.txt', type: str = 'ALL'):
     """
     Generate test commands and save to file.
     
@@ -234,8 +242,23 @@ def generate_test_commands(output_file: str = 'commands.txt'):
     generator = CommandGenerator(version=0, app_process_id=0x100)
     
     commands = []
+    data = {'HEPMS': [b'THIS_IS_HEPMS_SAMPLE_CMD', b'HEPMS_SENSOR_READ', b'HEPMS_SOH_GET'],
+            'HEEMS': [b'THIS_IS_HEEMS_SAMPLE_CMD', b'HEEMS_SENSOR_READ', b'HEEMS_SOH_GET'],
+            'SCRMS': [b'THIS_IS_SCRMS_SAMPLE_CMD', b'SCRMS_SENSOR_READ', b'SCRMS_SOH_GET'],
+            'SOSMAG': [b'THIS_IS_SOSMAG_SAMPLE_CMD', b'SOSMAG_SENSOR_READ', b'SOSMAG_SOH_GET']}
     
     # Example 1: Simple LED toggle command
+    if type == 'ALL':
+        for name, cmd_data in data.items():
+            packet = generator.generate_packet(cmd_data, packet_type=PacketType.COMMAND)
+            commands.append(packet.hex().upper())
+    else:
+        data = data.get(type, [])
+        for _ in range()
+            for d in data:
+                packet = generator.generate_packet(d, packet_type=PacketType.TELEMETRY)
+                commands.append(packet.hex().upper())
+        
     data = b'LED_TOGGLE'
     packet = generator.generate_packet(data, packet_type=PacketType.COMMAND)
     commands.append(packet.hex().upper())
@@ -279,6 +302,11 @@ def generate_test_commands(output_file: str = 'commands.txt'):
 
 
 if __name__ == "__main__":
+    
+    parser = argparse.ArgumentParser(description="CCSDS-like Command Generator for SAME70")
+    parser.add_argument('--output', type=str, help='Output file for generated commands, ex: HEPMS')
+    args = parser.parse_args()
+    
     print("=" * 60)
     print("CCSDS-like Command Generator")
     print("=" * 60)
@@ -302,7 +330,8 @@ if __name__ == "__main__":
     
     # Generate test command file
     print("\n🔨 Generating test commands...")
-    generate_test_commands('commands.txt')
+    output_file = args.output + 'commands.txt'
+    generate_test_commands(output_file=output_file)
     
     print("\n✅ Command generator ready!")
     print("\nUsage example:")
