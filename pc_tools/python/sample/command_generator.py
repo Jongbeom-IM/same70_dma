@@ -20,6 +20,7 @@ Date: 2025-12-29
 
 import struct
 import binascii
+import math
 from typing import List, Optional
 from enum import IntEnum
 import argparse
@@ -224,11 +225,168 @@ class CommandGenerator:
             'crc': f'0x{crc:04X}' if crc is not None else 'N/A'
         }
 
+def generate_sine_wave_table(num_samples: int = 256, amplitude: int = 127, offset: int = 128) -> List[int]:
+    """
+    사인파(Sine Wave) 테이블 생성
+    
+    Args:
+        num_samples: 샘플 개수 (기본값: 256)
+        amplitude: 진폭 (기본값: 127)
+        offset: 오프셋 (기본값: 128, 0~255 범위를 위해)
+        
+    Returns:
+        사인파 값들의 리스트 (0~255 범위)
+    """
+    table = []
+    for i in range(num_samples):
+        angle = 2 * math.pi * i / num_samples
+        value = int(amplitude * math.sin(angle) + offset)
+        value = max(0, min(255, value))  # 0~255 범위로 제한
+        table.append(value)
+    return table
+
+
+def generate_triangle_wave_table(num_samples: int = 256, amplitude: int = 255, offset: int = 0) -> List[int]:
+    """
+    삼각파(Triangle Wave) 테이블 생성
+    
+    Args:
+        num_samples: 샘플 개수 (기본값: 256)
+        amplitude: 진폭 (기본값: 255)
+        offset: 오프셋 (기본값: 0)
+        
+    Returns:
+        삼각파 값들의 리스트 (0~255 범위)
+    """
+    table = []
+    half = num_samples // 2
+    
+    for i in range(num_samples):
+        if i < half:
+            # 상승 구간 (0 -> amplitude)
+            value = int((amplitude * i) / half + offset)
+        else:
+            # 하강 구간 (amplitude -> 0)
+            value = int(amplitude - (amplitude * (i - half)) / half + offset)
+        
+        value = max(0, min(255, value))  # 0~255 범위로 제한
+        table.append(value)
+    
+    return table
+
+
+def generate_square_wave_table(num_samples: int = 256, high: int = 255, low: int = 0) -> List[int]:
+    """
+    사각파(Square Wave) 테이블 생성
+    
+    Args:
+        num_samples: 샘플 개수 (기본값: 256)
+        high: 높은 레벨 값 (기본값: 255)
+        low: 낮은 레벨 값 (기본값: 0)
+        
+    Returns:
+        사각파 값들의 리스트 (0~255 범위)
+    """
+    table = []
+    half = num_samples // 2
+    
+    for i in range(num_samples):
+        if i < half:
+            table.append(high)
+        else:
+            table.append(low)
+    
+    return table
+
+
+def generate_sawtooth_wave_table(num_samples: int = 256, amplitude: int = 255, offset: int = 0) -> List[int]:
+    """
+    톱니파(Sawtooth Wave) 테이블 생성
+    
+    Args:
+        num_samples: 샘플 개수 (기본값: 256)
+        amplitude: 진폭 (기본값: 255)
+        offset: 오프셋 (기본값: 0)
+        
+    Returns:
+        톱니파 값들의 리스트 (0~255 범위)
+    """
+    table = []
+    
+    for i in range(num_samples):
+        # 선형 증가 (0 -> amplitude, 그 다음 다시 0으로)
+        value = int((amplitude * i) / num_samples + offset)
+        value = max(0, min(255, value))  # 0~255 범위로 제한
+        table.append(value)
+    
+    return table
+
+
+def print_waveform_table(table: List[int], name: str, values_per_line: int = 16):
+    """
+    파형 테이블을 C 배열 형식으로 출력
+    
+    Args:
+        table: 파형 값 리스트
+        name: 테이블 이름
+        values_per_line: 한 줄당 값의 개수
+    """
+    print(f"\nconst uint8_t {name}[{len(table)}] = {{")
+    
+    for i in range(0, len(table), values_per_line):
+        line_values = table[i:i + values_per_line]
+        formatted = ", ".join(f"{v:3d}" for v in line_values)
+        if i + values_per_line < len(table):
+            print(f"    {formatted},")
+        else:
+            print(f"    {formatted}")
+    
+    print("};")
+
+
+def generate_all_waveform_tables(num_samples: int = 256):
+    """
+    모든 파형 테이블 생성 및 출력
+    
+    Args:
+        num_samples: 샘플 개수
+    """
+    print("=" * 80)
+    print("파형 테이블 생성 (Waveform Table Generation)")
+    print("=" * 80)
+    
+    # 사인파 (Sine Wave)
+    sine_table = generate_sine_wave_table(num_samples)
+    print_waveform_table(sine_table, "sine_wave_table", 16)
+    
+    # 삼각파 (Triangle Wave)
+    triangle_table = generate_triangle_wave_table(num_samples)
+    print_waveform_table(triangle_table, "triangle_wave_table", 16)
+    
+    # 사각파 (Square Wave)
+    square_table = generate_square_wave_table(num_samples)
+    print_waveform_table(square_table, "square_wave_table", 16)
+    
+    # 톱니파 (Sawtooth Wave)
+    sawtooth_table = generate_sawtooth_wave_table(num_samples)
+    print_waveform_table(sawtooth_table, "sawtooth_wave_table", 16)
+    
+    print("\n" + "=" * 80)
+    print(f"총 {num_samples}개 샘플로 구성된 4개의 파형 테이블이 생성되었습니다.")
+    print("=" * 80)
+
+
 def sample_command(type: str):
+    """
+    샘플 명령 생성
+    
+    Args:
+        type: 명령 타입
+        
+    Returns:
+        명령 바이트 데이터
+    """
     # 65바이트 길이: "This is hepms soh " (18) + "0"*46 + "1"
-    def cmd_gen(cmd, le):
-        
-        
     T1_SOH = b"THIS_IS_HEPMS_T1_SOH_" + b"0" * 46 + b"1"  # Total: 65 bytes
     return T1_SOH
 
@@ -250,14 +408,14 @@ def generate_test_commands(output_file: str = 'commands.txt', type: str = 'ALL')
     # Example 1: Simple LED toggle command
     if type == 'ALL':
         for name, cmd_data in data.items():
-            packet = generator.generate_packet(cmd_data, packet_type=PacketType.COMMAND)
-            commands.append(packet.hex().upper())
-    else:
-        data = data.get(type, [])
-        for _ in range()
-            for d in data:
-                packet = generator.generate_packet(d, packet_type=PacketType.TELEMETRY)
+            for d in cmd_data:
+                packet = generator.generate_packet(d, packet_type=PacketType.COMMAND)
                 commands.append(packet.hex().upper())
+    else:
+        cmd_list = data.get(type, [])
+        for d in cmd_list:
+            packet = generator.generate_packet(d, packet_type=PacketType.TELEMETRY)
+            commands.append(packet.hex().upper())
         
     data = b'LED_TOGGLE'
     packet = generator.generate_packet(data, packet_type=PacketType.COMMAND)
@@ -305,7 +463,14 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="CCSDS-like Command Generator for SAME70")
     parser.add_argument('--output', type=str, help='Output file for generated commands, ex: HEPMS')
+    parser.add_argument('--waveform', action='store_true', help='Generate waveform tables')
+    parser.add_argument('--samples', type=int, default=256, help='Number of samples for waveform tables (default: 256)')
     args = parser.parse_args()
+    
+    # 파형 테이블 생성 모드
+    if args.waveform:
+        generate_all_waveform_tables(args.samples)
+        exit(0)
     
     print("=" * 60)
     print("CCSDS-like Command Generator")
