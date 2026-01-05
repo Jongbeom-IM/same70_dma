@@ -3,6 +3,7 @@ import binascii
 import math
 from typing import List, Optional
 from enum import IntEnum
+import argparse
 
 
 class PacketType(IntEnum):
@@ -107,24 +108,12 @@ class CommandGenerator:
         self.sequence_count = 0
 
     def generate_packet(self,
-                        data,  # DataSegment 또는 bytes
+                        data,
+                        max_packet_size: int,
+                        cmd_lines: int,
                         packet_type: PacketType = PacketType.COMMAND,
                         sec_hdr_flag: SecondaryHeaderFlag = SecondaryHeaderFlag.ABSOLUTE_TIME,
-                        segment_flag: SegmentationFlags = SegmentationFlags.UNSEGMENTED,
-                        max_packet_size: Optional[int] = None) -> List[bytes]:
-        """
-        패킷 생성 (데이터가 크면 여러 패킷으로 분할)
-        
-        Args:
-            data: DataSegment 객체 또는 bytes 데이터
-            packet_type: 패킷 타입
-            sec_hdr_flag: 보조 헤더 플래그
-            segment_flag: 세그먼트 플래그
-            max_packet_size: 최대 패킷 크기 (None이면 분할 안함)
-            
-        Returns:
-            패킷 리스트 (분할되지 않으면 단일 패킷 리스트)
-        """
+                        segment_flag: SegmentationFlags = SegmentationFlags.UNSEGMENTED) -> List[bytes]:
         # DataSegment 객체면 bytes로 변환
         if isinstance(data, DataSegment):
             data_bytes = data.to_bytes()
@@ -136,28 +125,7 @@ class CommandGenerator:
         
         packets = []
         
-        # 패킷 분할 여부 결정
-        if max_packet_size is None or len(data_bytes) <= max_packet_size:
-            # 분할 안함 - 단일 패킷
-            packet_length = len(data_bytes) - 1
-            if packet_length < 0:
-                packet_length = 0
-            
-            primary_header = self._build_primary_header(
-                packet_type=packet_type,
-                sec_hdr_flag=sec_hdr_flag,
-                segment_flag=segment_flag,
-                packet_length=packet_length
-            )
-            
-            packet = primary_header + data_bytes
-            crc = self._calculate_crc16(packet)
-            packet += struct.pack('>H', crc)
-            self.sequence_count = (self.sequence_count + 1) & 0x3FFF
-            
-            packets.append(packet)
-        else:
-            # 분할 필요 - 여러 패킷
+        while cmd_lines > 0:
             total_data_len = len(data_bytes)
             offset = 0
             packet_index = 0
@@ -192,6 +160,7 @@ class CommandGenerator:
                 crc = self._calculate_crc16(packet)
                 packet += struct.pack('>H', crc)
                 self.sequence_count = (self.sequence_count + 1) & 0x3FFF
+                cmd_lines -= 1
                 
                 packets.append(packet)
                 
@@ -206,8 +175,6 @@ class CommandGenerator:
                               segment_flag: SegmentationFlags,
                               packet_length: int) -> bytes:
         """
-        Build 6-byte primary header.
-        
         Bit layout:
         Byte 0: [Version:3][Type:1][Sec Hdr:1][APID:3 MSB]
         Byte 1: [APID:8 LSB]
@@ -231,11 +198,6 @@ class CommandGenerator:
         return header
     
     def _calculate_crc16(self, data: bytes) -> int:
-        """
-        Calculate CRC-16-CCITT checksum.
-        Polynomial: 0x1021
-        Initial value: 0xFFFF
-        """
         crc = 0xFFFF
         for byte in data:
             crc ^= (byte << 8)
@@ -259,11 +221,13 @@ if __name__ == "__main__":
     print("CCSDS Command Generator - 파형 생성 테스트")
     print("=" * 70)
     
+    
+    
     gen = CommandGenerator(version=0, app_process_id=100)
 
     gen.reset_sequence_count()
     large_sine = DataSegment(waveform_type=WaveformType.SINE, num_samples=512)
-    split_packets = gen.generate_packet(large_sine, max_packet_size=256)
+    split_packets = gen.generate_packet(large_sine, max_packet_size = 248, cmd_lines = 1024)
     print(f"생성된 패킷 수: {len(split_packets)}")
     for i, pkt in enumerate(split_packets):  # 처음 3개만 출력
         print(f"  패킷 {i+1}: {len(pkt)} bytes, 헥스: {pkt.hex().upper()[:40]}...")

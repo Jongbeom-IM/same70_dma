@@ -420,6 +420,14 @@ class MultiPortCommMonitor:
         )
         widgets['send_btn'].grid(row=1, column=3, padx=(0, 10), pady=(5, 0))
         
+        widgets['waveform_btn'] = ttk.Button(
+            port_frame,
+            text="🌊 Waveform",
+            command=lambda p=port_id: self.open_waveform_generator(p)
+        )
+        widgets['waveform_btn'].grid(row=1, column=3, padx=(0, 10), pady=(5, 0))
+        
+        
         # Auto test checkbox
         widgets['auto_test_var'] = tk.BooleanVar()
         widgets['auto_test_cb'] = ttk.Checkbutton(
@@ -483,7 +491,7 @@ class MultiPortCommMonitor:
         
         # Connection Status
         ttk.Label(status_frame, text="Status:").grid(row=0, column=0, sticky="w")
-        widgets['conn_status'] = ttk.Label(status_frame, text="❌ Disconnected", foreground="red")
+        widgets['conn_status'] = ttk.Label(status_frame, text="Disconnected", foreground="red")
         widgets['conn_status'].grid(row=0, column=1, sticky="w", padx=(5, 20))
         
         # Packets Sent/Received
