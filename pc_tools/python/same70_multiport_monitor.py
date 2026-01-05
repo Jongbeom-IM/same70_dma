@@ -32,7 +32,7 @@ from collections import deque
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
-# import matplotlib.animation as animation  # 사용되지 않는 import 제거
+from cmd_gen import CommandGenerator, DataSegment, WaveformType
 
 class ToolTip:
     """Simple tooltip widget for providing helpful hints."""
@@ -131,6 +131,11 @@ class PortManager:
         # Timeout management
         self.packet_timeout = 5.0  # 5 seconds timeout
         self.last_cleanup_time = time.time()
+        
+        # Command Generator for sample packets
+        self.cmd_generator = CommandGenerator(version=1, app_process_id=port_id)
+        self.sample_packet_running = False
+        self.debug_mode = False  # Debug mode flag
     
     def connect(self, port: str, baudrate: int) -> bool:
         """Connect to specified port."""
@@ -190,8 +195,17 @@ class PortManager:
         while self.running and self.is_connected and self.serial_port:
             try:
                 if self.serial_port.in_waiting > 0:
-                    data = self.serial_port.readline().decode('utf-8').strip()
+                    raw_data = self.serial_port.readline()
+                    # Try to decode as UTF-8, fallback to hex representation for binary data
+                    # try:
+                    #     data = raw_data.decode('utf-8').strip()
+                    # except UnicodeDecodeError:
+                    #     # Binary data - convert to hex string
+                    #     data = f"[HEX] {raw_data.hex().upper()}"
+                    data = f"[hex] {raw_data.hex().upper()}"
                     if data:
+                        if self.debug_mode:
+                            self.log_queue.put((time.time(), f"[DEBUG] Port {self.port_id} raw RX: {data}", "info"))
                         self.rx_queue.put((time.time(), data))
                 time.sleep(0.01)
             except Exception as e:
@@ -270,6 +284,78 @@ class PortManager:
             self.stats.calculate_packet_loss()
             
         self.last_cleanup_time = current_time
+    
+    def send_sample_packets(self, waveform_type: WaveformType, num_samples: int, max_packet_size: int):
+        """Send sample packets using CommandGenerator."""
+        if not self.is_connected:
+            return
+        
+        try:
+            # Create data segment
+            data_segment = DataSegment(waveform_type=waveform_type, num_samples=num_samples)
+            
+            # DEBUG: Log waveform generation
+            if self.debug_mode:
+                waveform_names = {0: "SINE", 1: "TRIANGLE", 2: "SAWTOOTH", 3: "SQUARE", 4: "CUSTOM"}
+                self.log_queue.put((
+                    time.time(), 
+                    f"[DEBUG] Generating {waveform_names.get(waveform_type, 'UNKNOWN')} waveform with {num_samples} samples",
+                    "info"
+                ))
+            
+            # Generate packets (may be split into multiple packets)
+            packets = self.cmd_generator.generate_packet(data_segment, max_packet_size=max_packet_size, cmd_lines=1)
+            
+            # DEBUG: Log packet generation info
+            if self.debug_mode:
+                total_data_size = len(data_segment.to_bytes())
+                self.log_queue.put((
+                    time.time(),
+                    f"[DEBUG] Generated {len(packets)} packet(s), Total data: {total_data_size} bytes, Max packet size: {max_packet_size} bytes",
+                    "info"
+                ))
+            
+            # Send all packets
+            for idx, packet in enumerate(packets, 1):
+                if self.serial_port and self.serial_port.is_open:
+                    self.serial_port.write(packet)
+                    self.serial_port.flush()
+                    self.stats.packets_sent += 1
+                    
+                    # Log packet transmission
+                    if self.debug_mode:
+                        # Detailed hex dump in debug mode
+                        hex_full = packet.hex().upper()
+                        # Format: XX XX XX XX ...
+                        hex_formatted = ' '.join([hex_full[i:i+2] for i in range(0, min(len(hex_full), 80), 2)])
+                        if len(hex_full) > 80:
+                            hex_formatted += "..."
+                        self.log_queue.put((
+                            time.time(),
+                            f"[TX] Sample Packet #{idx}/{len(packets)}: {len(packet)} bytes\n      Hex: {hex_formatted}",
+                            "tx"
+                        ))
+                    else:
+                        # Compact format in normal mode
+                        hex_preview = packet.hex().upper()[:40] + "..." if len(packet) > 20 else packet.hex().upper()
+                        self.log_queue.put((
+                            time.time(),
+                            f"[TX] Sample Packet #{idx}/{len(packets)}: {len(packet)} bytes [{hex_preview}]",
+                            "tx"
+                        ))
+            
+            # Summary log
+            self.log_queue.put((
+                time.time(),
+                f"✓ Sent {len(packets)} sample packet(s) successfully",
+                "info"
+            ))
+            
+            return len(packets)
+            
+        except Exception as e:
+            self.log_queue.put((time.time(), f"✗ Sample packet error: {e}", "error"))
+            return 0
 
 class MultiPortCommMonitor:
     """Main GUI application for multi-port SAME70-XPLD communication monitoring."""
@@ -283,6 +369,7 @@ class MultiPortCommMonitor:
         # Port managers (6 slave devices + 1 master device)
         self.port_managers = [PortManager(i) for i in range(7)]
         self.auto_test_threads = {}
+        self.sample_packet_threads = {}  # Sample packet sending threads
         self.command_lists = {}  # Store command lists for each port
         
         # GUI setup
@@ -419,14 +506,7 @@ class MultiPortCommMonitor:
             command=lambda p=port_id: self.send_test_packet(p)
         )
         widgets['send_btn'].grid(row=1, column=3, padx=(0, 10), pady=(5, 0))
-        
-        widgets['waveform_btn'] = ttk.Button(
-            port_frame,
-            text="🌊 Waveform",
-            command=lambda p=port_id: self.open_waveform_generator(p)
-        )
-        widgets['waveform_btn'].grid(row=1, column=3, padx=(0, 10), pady=(5, 0))
-        
+       
         
         # Auto test checkbox
         widgets['auto_test_var'] = tk.BooleanVar()
@@ -443,6 +523,52 @@ class MultiPortCommMonitor:
         widgets['interval_var'] = tk.StringVar(value="1.0")
         widgets['interval_entry'] = ttk.Entry(port_frame, textvariable=widgets['interval_var'], width=6)
         widgets['interval_entry'].grid(row=1, column=6, sticky="w", pady=(5, 0))
+        
+        # Sample packet controls (Row 2)
+        ttk.Label(port_frame, text="Sample Packets:").grid(row=2, column=0, sticky="w", padx=(0, 5), pady=(5, 0))
+        
+        # Waveform type selection
+        widgets['waveform_var'] = tk.StringVar(value="SINE")
+        widgets['waveform_combo'] = ttk.Combobox(
+            port_frame, 
+            textvariable=widgets['waveform_var'], 
+            width=10,
+            values=["SINE", "TRIANGLE", "SAWTOOTH", "SQUARE"],
+            state="readonly"
+        )
+        widgets['waveform_combo'].grid(row=2, column=1, sticky="w", padx=(0, 5), pady=(5, 0))
+        
+        # Sample count
+        ttk.Label(port_frame, text="Samples:").grid(row=2, column=2, sticky="e", padx=(5, 5), pady=(5, 0))
+        widgets['samples_var'] = tk.StringVar(value="512")
+        widgets['samples_combo'] = ttk.Combobox(
+            port_frame,
+            textvariable=widgets['samples_var'],
+            width=8,
+            values=["128", "256", "512", "1024"],
+            state="readonly"
+        )
+        widgets['samples_combo'].grid(row=2, column=3, sticky="w", padx=(0, 5), pady=(5, 0))
+        
+        # Packet size
+        ttk.Label(port_frame, text="Pkt Size:").grid(row=2, column=4, sticky="e", padx=(5, 5), pady=(5, 0))
+        widgets['pkt_size_var'] = tk.StringVar(value="256")
+        widgets['pkt_size_combo'] = ttk.Combobox(
+            port_frame,
+            textvariable=widgets['pkt_size_var'],
+            width=8,
+            values=["64", "128", "256", "512"],
+            state="readonly"
+        )
+        widgets['pkt_size_combo'].grid(row=2, column=5, sticky="w", padx=(0, 5), pady=(5, 0))
+        
+        # Sample packet send button
+        widgets['sample_btn'] = ttk.Button(
+            port_frame,
+            text="▶ Start Sample",
+            command=lambda p=port_id: self.toggle_sample_packets(p)
+        )
+        widgets['sample_btn'].grid(row=2, column=6, sticky="ew", pady=(5, 0))
         
         self.port_widgets[port_id] = widgets
     
@@ -539,6 +665,17 @@ class MultiPortCommMonitor:
             width=15
         )
         log_filter.pack(side="left", padx=(5, 20))
+        
+        # Debug mode checkbox
+        self.debug_mode_var = tk.BooleanVar()
+        debug_cb = ttk.Checkbutton(
+            control_frame,
+            text="🐛 Debug Mode",
+            variable=self.debug_mode_var,
+            command=self.toggle_debug_mode
+        )
+        debug_cb.pack(side="left", padx=(0, 20))
+        self.create_tooltip(debug_cb, "Enable detailed packet logging\n• Show full hex dumps\n• Display packet generation details\n• Show waveform information")
         
         # Control buttons
         ttk.Button(control_frame, text="🗑️ Clear Log", 
@@ -858,6 +995,116 @@ class MultiPortCommMonitor:
         """Stop automatic test for specified port."""
         self.port_widgets[port_id]['auto_test_var'].set(False)
     
+    def toggle_sample_packets(self, port_id):
+        """Toggle sample packet sending for specified port."""
+        manager = self.port_managers[port_id]
+        widgets = self.port_widgets[port_id]
+        
+        if not manager.is_connected:
+            port_name = "Master Device" if port_id == 6 else f"Port {port_id + 1}"
+            messagebox.showwarning("Not Connected", f"{port_name} is not connected.")
+            return
+        
+        if not manager.sample_packet_running:
+            # Start sending sample packets
+            manager.sample_packet_running = True
+            widgets['sample_btn'].configure(text="⏸ Stop Sample")
+            self.start_sample_packets(port_id)
+        else:
+            # Stop sending sample packets
+            manager.sample_packet_running = False
+            widgets['sample_btn'].configure(text="▶ Start Sample")
+    
+    def send_manual_packet(self, port_id):
+        """Send a single packet manually."""
+        widgets = self.port_widgets[port_id]
+        manager = self.port_managers[port_id]
+        port_name = "Master Device" if port_id == 6 else f"Port {port_id + 1}"
+        
+        if not manager.is_connected:
+            messagebox.showwarning("Not Connected", f"{port_name} is not connected!")
+            return
+        
+        try:
+            # Get parameters from GUI
+            waveform_str = widgets['waveform_var'].get()
+            num_samples = int(widgets['samples_var'].get())
+            max_packet_size = int(widgets['pkt_size_var'].get())
+            
+            # Convert waveform string to enum
+            waveform_map = {
+                "SINE": WaveformType.SINE,
+                "TRIANGLE": WaveformType.TRIANGLE,
+                "SAWTOOTH": WaveformType.SAWTOOTH,
+                "SQUARE": WaveformType.SQUARE
+            }
+            waveform_type = waveform_map.get(waveform_str, WaveformType.SINE)
+            
+            # Send sample packets
+            num_packets = manager.send_sample_packets(waveform_type, num_samples, max_packet_size)
+            
+            if num_packets > 0:
+                self.log_message(
+                    f"{port_name}: Manually sent {num_packets} packet(s) [{waveform_str}, {num_samples} samples]",
+                    "info"
+                )
+        except ValueError as e:
+            messagebox.showerror("Invalid Parameter", f"Invalid parameter: {e}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to send packet: {e}")
+    
+    def start_sample_packets(self, port_id):
+        """Start continuous sample packet sending."""
+        def sample_send_loop():
+            widgets = self.port_widgets[port_id]
+            manager = self.port_managers[port_id]
+            port_name = "Master Device" if port_id == 6 else f"Port {port_id + 1}"
+            
+            while manager.sample_packet_running and manager.is_connected:
+                try:
+                    # Get parameters from GUI
+                    waveform_str = widgets['waveform_var'].get()
+                    num_samples = int(widgets['samples_var'].get())
+                    max_packet_size = int(widgets['pkt_size_var'].get())
+                    interval = float(widgets['interval_var'].get())
+                    
+                    # Convert waveform string to enum
+                    waveform_map = {
+                        "SINE": WaveformType.SINE,
+                        "TRIANGLE": WaveformType.TRIANGLE,
+                        "SAWTOOTH": WaveformType.SAWTOOTH,
+                        "SQUARE": WaveformType.SQUARE
+                    }
+                    waveform_type = waveform_map.get(waveform_str, WaveformType.SINE)
+                    
+                    # Send sample packets
+                    num_packets = manager.send_sample_packets(waveform_type, num_samples, max_packet_size)
+                    
+                    if num_packets > 0:
+                        self.log_message(
+                            f"{port_name}: Sent {num_packets} sample packet(s) [{waveform_str}, {num_samples} samples]",
+                            "info"
+                        )
+                    
+                    # Wait for interval
+                    time.sleep(interval)
+                    
+                except ValueError as e:
+                    self.log_message(f"{port_name}: Invalid parameter: {e}", "error")
+                    manager.sample_packet_running = False
+                    widgets['sample_btn'].configure(text="▶ Start Sample")
+                    break
+                except Exception as e:
+                    self.log_message(f"{port_name}: Sample packet error: {e}", "error")
+                    manager.sample_packet_running = False
+                    widgets['sample_btn'].configure(text="▶ Start Sample")
+                    break
+        
+        if port_id not in self.sample_packet_threads or not self.sample_packet_threads[port_id].is_alive():
+            sample_thread = threading.Thread(target=sample_send_loop, daemon=True)
+            sample_thread.start()
+            self.sample_packet_threads[port_id] = sample_thread
+    
     def reset_port_statistics(self, port_id):
         """Reset statistics for specified port."""
         manager = self.port_managers[port_id]
@@ -995,6 +1242,18 @@ class MultiPortCommMonitor:
         # Limit log size
         if int(self.log_text.index(tk.END).split('.')[0]) > 1000:
             self.log_text.delete('1.0', '100.0')
+    
+    def toggle_debug_mode(self):
+        """Toggle debug mode for all ports."""
+        debug_enabled = self.debug_mode_var.get()
+        
+        # Update all port managers
+        for manager in self.port_managers:
+            manager.debug_mode = debug_enabled
+        
+        # Log the change
+        status = "enabled" if debug_enabled else "disabled"
+        self.log_message(f"🐛 Debug mode {status}", "info")
     
     def clear_log(self):
         """Clear communication log."""
