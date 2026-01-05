@@ -111,7 +111,6 @@ class CommandGenerator:
     def generate_packet(self,
                         data,
                         max_packet_size: int,
-                        cmd_lines: int,
                         packet_type: PacketType = PacketType.COMMAND,
                         sec_hdr_flag: SecondaryHeaderFlag = SecondaryHeaderFlag.ABSOLUTE_TIME,
                         segment_flag: SegmentationFlags = SegmentationFlags.UNSEGMENTED) -> List[bytes]:
