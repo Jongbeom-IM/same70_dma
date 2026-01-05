@@ -106,6 +106,7 @@ class CommandGenerator:
         self.version = version & 0x07 # 3 bits
         self.app_process_id = app_process_id & 0x7FF # 11 bits
         self.sequence_count = 0
+        self.msg_id = 0
 
     def generate_packet(self,
                         data,
@@ -125,47 +126,48 @@ class CommandGenerator:
         
         packets = []
         
-        while cmd_lines > 0:
-            total_data_len = len(data_bytes)
-            offset = 0
-            packet_index = 0
+        # 패킷 분할 여부 결정
+        total_data_len = len(data_bytes)
+        offset = 0
+        packet_index = 0
+        
+        while offset < total_data_len:
+            # 현재 패킷에 넣을 데이터 크기 결정
+            remaining = total_data_len - offset
+            chunk_size = min(max_packet_size, remaining)
+            chunk = data_bytes[offset:offset + chunk_size]
             
-            while offset < total_data_len:
-                # 현재 패킷에 넣을 데이터 크기 결정
-                remaining = total_data_len - offset
-                chunk_size = min(max_packet_size, remaining)
-                chunk = data_bytes[offset:offset + chunk_size]
-                
-                # 세그먼트 플래그 결정
-                if packet_index == 0:
-                    seg_flag = SegmentationFlags.FIRST_SEGMENT
-                elif offset + chunk_size >= total_data_len:
-                    seg_flag = SegmentationFlags.LAST_SEGMENT
-                else:
-                    seg_flag = SegmentationFlags.CONTINUING_SEGMENT
-                
-                # 패킷 생성
-                packet_length = len(chunk) - 1
-                if packet_length < 0:
-                    packet_length = 0
-                
-                primary_header = self._build_primary_header(
-                    packet_type=packet_type,
-                    sec_hdr_flag=sec_hdr_flag,
-                    segment_flag=seg_flag,
-                    packet_length=packet_length
-                )
-                
-                packet = primary_header + chunk
-                crc = self._calculate_crc16(packet)
-                packet += struct.pack('>H', crc)
-                self.sequence_count = (self.sequence_count + 1) & 0x3FFF
-                cmd_lines -= 1
-                
-                packets.append(packet)
-                
-                offset += chunk_size
-                packet_index += 1
+            # 세그먼트 플래그 결정
+            if packet_index == 0:
+                seg_flag = SegmentationFlags.FIRST_SEGMENT
+            elif offset + chunk_size >= total_data_len:
+                seg_flag = SegmentationFlags.LAST_SEGMENT
+            else:
+                seg_flag = SegmentationFlags.CONTINUING_SEGMENT
+            
+            # 패킷 생성
+            packet_length = len(chunk) - 1
+            if packet_length < 0:
+                packet_length = 0
+            
+            primary_header = self._build_primary_header(
+                packet_type=packet_type,
+                sec_hdr_flag=sec_hdr_flag,
+                segment_flag=seg_flag,
+                packet_length=packet_length
+            )
+            
+            packet = primary_header + chunk
+            crc = self._calculate_crc16(packet)
+            packet += struct.pack('>H', crc)
+            self.sequence_count = (self.sequence_count + 1) & 0x3F
+            
+            packets.append(packet)
+            
+            offset += chunk_size
+            packet_index += 1
+
+        self.msg_id = (self.msg_id + 1) & 0xFF
         
         return packets
     
@@ -179,7 +181,7 @@ class CommandGenerator:
         Byte 0: [Version:3][Type:1][Sec Hdr:1][APID:3 MSB]
         Byte 1: [APID:8 LSB]
         Byte 2: [Seg Flags:2][Sequence Count:6 MSB]
-        Byte 3: [Sequence Count:8 middle]
+        Byte 3: [Msg ID:8 middle]
         Byte 4: [Packet Length:8 MSB]
         Byte 5: [Packet Length:8 LSB]
         """
@@ -187,7 +189,7 @@ class CommandGenerator:
         word0 = (self.version << 13) | (packet_type << 12) | (sec_hdr_flag << 11) | self.app_process_id
         
         # Next 16 bits: SegFlags(2) + SequenceCount(14)
-        word1 = (segment_flag << 14) | self.sequence_count
+        word1 = (segment_flag << 14) | (self.sequence_count << 8) | self.msg_id 
         
         # Last 16 bits: PacketLength(16)
         word2 = packet_length & 0xFFFF
@@ -227,7 +229,7 @@ if __name__ == "__main__":
 
     gen.reset_sequence_count()
     large_sine = DataSegment(waveform_type=WaveformType.SINE, num_samples=512)
-    split_packets = gen.generate_packet(large_sine, max_packet_size = 248, cmd_lines = 1024)
+    split_packets = gen.generate_packet(large_sine, max_packet_size=256)
     print(f"생성된 패킷 수: {len(split_packets)}")
     for i, pkt in enumerate(split_packets):  # 처음 3개만 출력
         print(f"  패킷 {i+1}: {len(pkt)} bytes, 헥스: {pkt.hex().upper()[:40]}...")

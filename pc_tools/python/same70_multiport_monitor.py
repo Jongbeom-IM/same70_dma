@@ -32,6 +32,8 @@ from collections import deque
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+
+# cmd_gen 모듈에서 필요한 클래스들을 import
 from cmd_gen import CommandGenerator, DataSegment, WaveformType
 
 class ToolTip:
@@ -304,7 +306,7 @@ class PortManager:
                 ))
             
             # Generate packets (may be split into multiple packets)
-            packets = self.cmd_generator.generate_packet(data_segment, max_packet_size=max_packet_size, cmd_lines=1)
+            packets = self.cmd_generator.generate_packet(data_segment, max_packet_size=max_packet_size)
             
             # DEBUG: Log packet generation info
             if self.debug_mode:
@@ -1014,44 +1016,6 @@ class MultiPortCommMonitor:
             # Stop sending sample packets
             manager.sample_packet_running = False
             widgets['sample_btn'].configure(text="▶ Start Sample")
-    
-    def send_manual_packet(self, port_id):
-        """Send a single packet manually."""
-        widgets = self.port_widgets[port_id]
-        manager = self.port_managers[port_id]
-        port_name = "Master Device" if port_id == 6 else f"Port {port_id + 1}"
-        
-        if not manager.is_connected:
-            messagebox.showwarning("Not Connected", f"{port_name} is not connected!")
-            return
-        
-        try:
-            # Get parameters from GUI
-            waveform_str = widgets['waveform_var'].get()
-            num_samples = int(widgets['samples_var'].get())
-            max_packet_size = int(widgets['pkt_size_var'].get())
-            
-            # Convert waveform string to enum
-            waveform_map = {
-                "SINE": WaveformType.SINE,
-                "TRIANGLE": WaveformType.TRIANGLE,
-                "SAWTOOTH": WaveformType.SAWTOOTH,
-                "SQUARE": WaveformType.SQUARE
-            }
-            waveform_type = waveform_map.get(waveform_str, WaveformType.SINE)
-            
-            # Send sample packets
-            num_packets = manager.send_sample_packets(waveform_type, num_samples, max_packet_size)
-            
-            if num_packets > 0:
-                self.log_message(
-                    f"{port_name}: Manually sent {num_packets} packet(s) [{waveform_str}, {num_samples} samples]",
-                    "info"
-                )
-        except ValueError as e:
-            messagebox.showerror("Invalid Parameter", f"Invalid parameter: {e}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to send packet: {e}")
     
     def start_sample_packets(self, port_id):
         """Start continuous sample packet sending."""
