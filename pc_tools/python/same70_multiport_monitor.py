@@ -141,7 +141,7 @@ class PortManager:
         
         # Packet reassembly buffer
         self.rx_buffer = bytearray()
-        self.packet_start_marker = bytes.fromhex('3000')  # 패킷 시작 헤더
+        # 패킷 시작 헤더는 30 0X (X = 0~5)
     
     def connect(self, port: str, baudrate: int) -> bool:
         """Connect to specified port."""
@@ -201,12 +201,9 @@ class PortManager:
         while self.running and self.is_connected and self.serial_port:
             try:
                 if self.serial_port.in_waiting > 0:
-                    raw_data = self.serial_port.readline()
-                    
-                    if self.debug_mode:
-                        self.log_queue.put((time.time(), 
-                            f"[DEBUG] Port {self.port_id} raw fragment: [HEX] {raw_data.hex().upper()}", "info"))
-                    
+                    # Read available bytes (not readline to avoid 0A issue)
+                    raw_data = self.serial_port.read(self.serial_port.in_waiting)
+  
                     # Add received data to buffer
                     self.rx_buffer.extend(raw_data)
                     
@@ -218,11 +215,18 @@ class PortManager:
                 self.log_queue.put((time.time(), f"RX Error: {e}", "error"))
                 break
     
+    def _find_packet_start(self, buffer, start_pos=0):
+        """Find packet start marker (30 0X where X = 0~5) in buffer."""
+        for i in range(start_pos, len(buffer) - 1):
+            if buffer[i] == 0x30 and 0x00 <= buffer[i + 1] <= 0x05:
+                return i
+        return -1
+    
     def _process_rx_buffer(self):
         """Process RX buffer and extract complete packets."""
         while True:
-            # Find packet start marker
-            start_idx = self.rx_buffer.find(self.packet_start_marker)
+            # Find packet start marker (30 0X where X = 0~5)
+            start_idx = self._find_packet_start(self.rx_buffer)
             
             if start_idx == -1:
                 # No packet start found, check if buffer is getting too large
@@ -237,37 +241,38 @@ class PortManager:
             if start_idx > 0:
                 if self.debug_mode:
                     discarded = self.rx_buffer[:start_idx]
+                    hex_str = discarded.hex().upper()
+                    formatted_hex = ' '.join([hex_str[i:i+2] for i in range(0, min(len(hex_str), 40), 2)])
+                    if len(hex_str) > 40:
+                        formatted_hex += "..."
                     self.log_queue.put((time.time(), 
-                        f"[DEBUG] Port {self.port_id} discarded {start_idx} bytes: {discarded.hex().upper()}", "warning"))
+                        f"[DEBUG] Port {self.port_id} discarded {start_idx} bytes: {formatted_hex}", "warning"))
                 self.rx_buffer = self.rx_buffer[start_idx:]
             
-            # Need at least header (4 bytes) + length field (1 byte)
-            if len(self.rx_buffer) < 5:
-                break
+            # Look for next packet start marker (search after current marker)
+            next_start_idx = self._find_packet_start(self.rx_buffer, 2)
             
-            # Extract packet length from header (assuming byte 4 is length)
-            packet_length = self.rx_buffer[4]
-            total_packet_size = 4 + 1 + packet_length  # header + length byte + payload
-            
-            # Wait for complete packet
-            if len(self.rx_buffer) < total_packet_size:
-                # Check if we've been waiting too long (potential incomplete packet)
-                if len(self.rx_buffer) > 512:  # Safety check
+            if next_start_idx == -1:
+                # Wait for more data - need to find end of current packet
+                # But check if buffer is getting too large
+                if len(self.rx_buffer) > 4096:
                     if self.debug_mode:
                         self.log_queue.put((time.time(), 
-                            f"[DEBUG] Port {self.port_id} incomplete packet timeout, have {len(self.rx_buffer)} bytes, need {total_packet_size}", "warning"))
-                    # Keep waiting or discard first packet marker to try next one
-                    self.rx_buffer = self.rx_buffer[4:]
+                            f"[DEBUG] Port {self.port_id} incomplete packet too large, discarding first marker", "warning"))
+                    self.rx_buffer = self.rx_buffer[2:]  # Remove first marker and try again
                     continue
                 break
             
-            # Extract complete packet
-            complete_packet = self.rx_buffer[:total_packet_size]
-            self.rx_buffer = self.rx_buffer[total_packet_size:]
+            # Extract complete packet (from first marker to just before second marker)
+            complete_packet = self.rx_buffer[:next_start_idx]
+            self.rx_buffer = self.rx_buffer[next_start_idx:]
             
-            # Convert to hex string and queue it
-            data = f"[HEX] {complete_packet.hex().upper()}"
-            self.rx_queue.put((time.time(), data))
+            # Format and log the complete packet
+            hex_str = complete_packet.hex().upper()
+            formatted_hex = ' '.join([hex_str[i:i+2] for i in range(0, len(hex_str), 2)])
+            
+            self.rx_queue.put((time.time(), formatted_hex))
+            # self.log_queue.put((time.time(), f"RX: [{len(complete_packet)} bytes] {formatted_hex}", "rx"))
             
             if self.debug_mode:
                 self.log_queue.put((time.time(), 
@@ -1016,8 +1021,6 @@ class MultiPortCommMonitor:
             while widgets['auto_test_var'].get() and manager.is_connected:
                 try:
                     interval = float(widgets['interval_var'].get())
-                    if interval < 0.1:  # Minimum interval validation
-                        interval = 0.1
                     
                     # Use command list if loaded, otherwise use manual command
                     if use_command_list:
