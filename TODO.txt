@@ -1,0 +1,18 @@
+사용자 핀 할당 정보
+
+SysTick --> delay 함수
+
+__DATE__, __TIME__
+
+MPLAB Extention
+
+7
+IDPU/HEPMS WG 일정
+주/격주 --> 격주로
+
+PSB/HEPMS 일정은 
+
+양성자측정기 SAMRH71 
+
+SAMRH707 - ADC 10Ch 있음
+

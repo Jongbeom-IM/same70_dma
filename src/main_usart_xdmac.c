@@ -40,7 +40,7 @@
 *	Return		:
 *********************************************************************/
 
-static void configure_console(void)
+static int configure_console(void)
 {
 	const usart_serial_options_t usart_serial_options = {
 		.baudrate = 115200,
@@ -52,6 +52,8 @@ static void configure_console(void)
 	/* Configure console UART. */
 	sysclk_enable_peripheral_clock(CONSOLE_UART_ID);
 	stdio_serial_init(CONSOLE_UART, &usart_serial_options);
+
+	return usart_serial_options.baudrate;
 }
 
 
@@ -66,23 +68,12 @@ static void configure_console(void)
 
 int main(void)
 {
-	uint8_t tx_buf0[34] = "USART0 - XDMAC Operation\r\n";
-	uint8_t rx_buf0[10];
-	uint8_t tx_buf1[34] = "USART1 - XDMAC Operation\r\n";
-	uint8_t rx_buf1[10];
-	uint8_t tx_buf2[34] = "USART2 - XDMAC Operation\r\n";
-	uint8_t rx_buf2[10];
-	uint8_t tx_buf3[34] = "UART0 - XDMAC Operation\r\n";
-	uint8_t rx_buf3[10];
-	uint8_t tx_buf4[34] = "UART1 - XDMAC Operation\r\n";
-	uint8_t rx_buf4[10];
-	uint8_t tx_buf5[34] = "UART2 - XDMAC Operation\r\n";
-	uint8_t rx_buf5[10];
-	uint8_t tx_buf6[34] = "UART3 - XDMAC Operation\r\n";
-	uint8_t rx_buf6[10];
-	uint8_t tx_buf7[34] = "UART4 - XDMAC Operation\r\n";
-	uint8_t rx_buf7[10];
-	uint32_t baudrate;
+	uint8_t rx_buf0[2048];
+	uint8_t rx_buf1[2048];
+	uint8_t rx_buf2[2048];
+	uint8_t rx_buf3[2048];
+	uint8_t rx_buf4[2048];
+	uint8_t rx_buf5[2048];
 
 
 	/* Initialize system clock */
@@ -93,7 +84,7 @@ int main(void)
 
 
 	/* Configure EDBG USART */
-	configure_console();
+	int baudrate = configure_console();
 
 	MAIN_Debug(("===============================================\r\n"));
 	MAIN_Debug(("[SAME70 XPLD - USART XDMAC Test\r\n"));
@@ -101,8 +92,6 @@ int main(void)
 	MAIN_Debug(("Processor Clock = %d Hz\r\n", sysclk_get_cpu_hz()));
 
 	pmc_enable_periph_clk(ID_XDMAC);
-
-	baudrate = 115200;
 
 	/* Initialize USART0 with DMA */
 	if(DRV_USART_Comm_Init(USART0, baudrate) != 0)

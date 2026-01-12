@@ -142,6 +142,25 @@ class PortManager:
         # Packet reassembly buffer
         self.rx_buffer = bytearray()
         # 패킷 시작 헤더는 30 0X (X = 0~5)
+        
+    def _parse_packet_length(self, buffer, start_idx) -> Optional[int]:
+        """Parse packet length from header.
+        Header structure (6 bytes):
+        Byte 0-1: Version/Type/SecHdr/APID
+        Byte 2-3: SegFlags/SeqCount/MsgID
+        Byte 4-5: Packet Length (data length - 1)
+        Total packet size = 6 (header) + packet_length + 1 (data) + 2 (CRC)
+        """
+        if len(buffer) < start_idx + 6:
+            return None  # Not enough data for header
+        
+        # Read packet length from bytes 4-5 (big-endian)
+        packet_length = (buffer[start_idx + 4] << 8) | buffer[start_idx + 5]
+        
+        # Total packet size = header(6) + data(packet_length+1) + CRC(2)
+        total_size = 6 + packet_length + 1 + 2
+        
+        return total_size
     
     def connect(self, port: str, baudrate: int) -> bool:
         """Connect to specified port."""
@@ -223,7 +242,7 @@ class PortManager:
         return -1
     
     def _process_rx_buffer(self):
-        """Process RX buffer and extract complete packets."""
+        """Process RX buffer and extract complete packets using length from header."""
         while True:
             # Find packet start marker (30 0X where X = 0~5)
             start_idx = self._find_packet_start(self.rx_buffer)
@@ -249,34 +268,37 @@ class PortManager:
                         f"[DEBUG] Port {self.port_id} discarded {start_idx} bytes: {formatted_hex}", "warning"))
                 self.rx_buffer = self.rx_buffer[start_idx:]
             
-            # Look for next packet start marker (search after current marker)
-            next_start_idx = self._find_packet_start(self.rx_buffer, 2)
+            # Parse packet length from header
+            expected_length = self._parse_packet_length(self.rx_buffer, 0)
             
-            if next_start_idx == -1:
-                # Wait for more data - need to find end of current packet
-                # But check if buffer is getting too large
-                if len(self.rx_buffer) > 4096:
-                    if self.debug_mode:
-                        self.log_queue.put((time.time(), 
-                            f"[DEBUG] Port {self.port_id} incomplete packet too large, discarding first marker", "warning"))
-                    self.rx_buffer = self.rx_buffer[2:]  # Remove first marker and try again
-                    continue
+            if expected_length is None:
+                # Not enough data for header yet
+                if self.debug_mode:
+                    self.log_queue.put((time.time(), 
+                        f"[DEBUG] Port {self.port_id} waiting for complete header (have {len(self.rx_buffer)} bytes)", "info"))
                 break
             
-            # Extract complete packet (from first marker to just before second marker)
-            complete_packet = self.rx_buffer[:next_start_idx]
-            self.rx_buffer = self.rx_buffer[next_start_idx:]
+            # Check if we have the complete packet
+            if len(self.rx_buffer) < expected_length:
+                # Wait for more data
+                if self.debug_mode:
+                    self.log_queue.put((time.time(), 
+                        f"[DEBUG] Port {self.port_id} waiting for complete packet: have {len(self.rx_buffer)}/{expected_length} bytes", "info"))
+                break
+            
+            # Extract complete packet
+            complete_packet = self.rx_buffer[:expected_length]
+            self.rx_buffer = self.rx_buffer[expected_length:]
             
             # Format and log the complete packet
             hex_str = complete_packet.hex().upper()
             formatted_hex = ' '.join([hex_str[i:i+2] for i in range(0, len(hex_str), 2)])
             
             self.rx_queue.put((time.time(), formatted_hex))
-            # self.log_queue.put((time.time(), f"RX: [{len(complete_packet)} bytes] {formatted_hex}", "rx"))
             
             if self.debug_mode:
                 self.log_queue.put((time.time(), 
-                    f"[DEBUG] Port {self.port_id} complete packet extracted: {len(complete_packet)} bytes", "info"))
+                    f"[DEBUG] Port {self.port_id} complete packet extracted: {len(complete_packet)} bytes (expected: {expected_length})", "info"))
     
     def _tx_worker(self):
         """Background thread for sending data."""
